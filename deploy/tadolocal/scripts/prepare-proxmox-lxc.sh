@@ -43,10 +43,11 @@ check_nesting_hints() {
   if [[ ! -e /dev/net/tun ]] && [[ ! -d /sys/module/tun ]]; then
     log "Hinweis: /dev/net/tun optional; für Docker-Bridge oft nicht kritisch."
   fi
-  log "Auf dem Proxmox-Host vor dem Start sicherstellen:"
+  log "Auf dem Proxmox-Host vor dem Start sicherstellen (Weg A = Default):"
+  log "  # Unprivileged CT + Nesting/keyctl in der GUI — oder:"
   log "  pct set <CTID> --features nesting=1,keyctl=1"
-  log "  # Spike-Empfehlung HomeKit/mDNS: privileged CT (siehe README Tradeoff)"
-  log "  pct set <CTID> --unprivileged 0"
+  log "  # Weg B (privileged): Nesting in der UI oft ausgegraut — Features per pct set;"
+  log "  #   nicht 'Unprivileged aus' + Nesting-Checkbox erwarten (siehe Spike-Anleitung)."
 }
 
 install_docker() {

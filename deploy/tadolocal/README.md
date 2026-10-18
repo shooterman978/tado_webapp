@@ -15,14 +15,16 @@ Upstream: [AmpScm/TadoLocal](https://github.com/AmpScm/TadoLocal) (Apache-2.0), 
 
 Für diesen Spike und das Dual-Deploy-Zielbild (Prod = Compose im Container) ist **Docker im Debian/Ubuntu-LXC** der robustere Weg.
 
-## Privileged vs. unprivileged
+## Unprivileged vs. privileged
 
 | Variante | Empfehlung Spike | Tradeoff |
 |---|---|---|
-| **Privileged LXC** + `nesting=1`, `keyctl=1` | **Ja** für ersten HomeKit-Pairing-Spike | Einfacher Docker + Host-Netz; größeres Risiko bei Container-Escape |
-| Unprivileged + Nesting | Später härten | Mehr Feature-Tuning; Host-Netz/mDNS teils zickiger |
+| **Unprivileged + `nesting=1` + `keyctl=1`** | **Default (Weg A)** | Nesting in der Proxmox-UI wählbar; Docker-in-LXC-Standard auf PVE 8 |
+| Privileged (+ Features per `pct set`) | Alternative (Weg B) | Nesting in der GUI oft **ausgegraut** (normal); mehr Rechte |
 
-**Empfehlung HomeKit/mDNS:** Privileged CT, `network_mode: host` in Compose, CT und Tado-Bridge im **selben LAN/VLAN**.
+**Wichtig:** Privileged + Nesting-Checkbox in der UI = Sackgasse. Details: Spike-Anleitung §2–§4b.
+
+**HomeKit/mDNS:** Compose mit `network_mode: host`, CT und Tado-Bridge im **selben LAN/VLAN**, Pairing über feste Bridge-IP in `.env`.
 
 ## Dateien
 

@@ -16,9 +16,9 @@
 ## Inhaltsverzeichnis
 
 1. [Vor dem Start](#1-vor-dem-start-checkliste--wo-finde-ich-ip-und-pin)
-2. [Wegwahl & Warnungen](#2-wegwahl--warnungen)
-3. [CT in der Proxmox-Web-UI anlegen](#3-ct-in-der-proxmox-web-ui-anlegen)
-4. [Features nesting/keyctl nachträglich setzen](#4-features-nestingkeyctl-nachträglich-setzen)
+2. [Wegwahl & Warnungen](#2-wegwahl--warnungen) (Nesting ausgegraut = normal; **Weg A Default**)
+3. [CT in der Proxmox-Web-UI anlegen (Weg A)](#3-ct-in-der-proxmox-web-ui-anlegen-weg-a)
+4. [Features nesting/keyctl (Weg A)](#4-features-nestingkeyctl-setzen-weg-a--gui) · [Weg B privileged](#4b-weg-b--privileged-ct-alternative-nesting-per-cli)
 5. [CT starten und Konsole öffnen](#5-ct-starten-und-konsole-öffnen)
 6. [Spike-Dateien ins CT kopieren](#6-spike-dateien-ins-ct-kopieren)
 7. [Docker installieren](#7-docker-installieren)
@@ -69,7 +69,7 @@
 
 ```
 Proxmox-Host
-  └── LXC „tadolocal“ (privileged, nesting, keyctl)
+  └── LXC „tadolocal“  ← Default: unprivileged + nesting + keyctl (Weg A)
         └── Docker + Compose
               └── Container tado-local (network_mode: host)
                     └── Port 4407 → REST/UI
@@ -78,16 +78,33 @@ Proxmox-Host
 
 **Docker Compose im LXC** (nicht nativ pip): Upstream-Dockerfile, Dual-Deploy mit Windows später, Pairing-DB als Volume, Version auf Tag `1.1.2` gepinnt.
 
-### Unprivileged vs. privileged (ehrlich)
+### Warum Nesting bei privileged ausgegraut ist (kein Bug)
 
-| | Privileged (Spike-Empfehlung) | Unprivileged |
+In der Proxmox-8-UI ist die Checkbox **Nesting** bei einem **privileged** CT oft **ausgegraut / nicht wählbar**. Das ist **normal**, kein Fehler deiner Installation.
+
+- **Privileged** = der CT läuft bereits mit erweiterten Rechten; Nesting ist in der GUI dann oft nicht separat schaltbar (teilweise redundant bzw. nur per CLI setzbar).
+- **Unprivileged** = Nesting und keyctl sind in der GUI **aktiv wählbar** — genau das braucht Docker-in-LXC als Standardpfad.
+
+Deshalb führt diese Anleitung dich **nicht** in die Sackgasse „Unprivileged aus + Nesting anhaken“.
+
+### Zwei Wege (nur einen wählen)
+
+| | **Weg A — empfohlen für Spike** | Weg B — Alternative |
 |---|---|---|
-| Docker-in-LXC | Einfacher mit `nesting` + `keyctl` | Oft mehr Fehler (cgroup, Geräte) |
-| HomeKit / host-Netz | Praktisch robuster | Kann gehen, mehr Frickelei |
-| Sicherheit | Größere Angriffsfläche, falls Docker ausbricht | Besser isoliert |
-| **Für diesen Spike** | **Ja** | Später härten |
+| Unprivileged | **an** | aus (privileged) |
+| Nesting / keyctl | In der **GUI** unter Features: **beide an** | GUI oft ausgegraut → auf dem **Proxmox-Host** per `pct set` |
+| Docker-in-LXC | Proxmox-8-Standard | Funktioniert, mehr Host-Eingriff |
+| Compose-Netz | weiter `network_mode: host` | ebenfalls `host` |
+| HomeKit / mDNS | CT + Bridge gleiches LAN; feste Bridge-IP in `.env`; host-Netz teilt LXC-Stack — mDNS meist unkritisch, weil wir per IP pairen | oft etwas „freier“, aber GUI-Fallstrick Nesting |
+| Sicherheit | Besser isoliert | Größere Angriffsfläche |
 
-Compose nutzt **`network_mode: host`**: der Docker-Container teilt sich den Netzwerk-Stack des LXC → gleiche LAN-Sicht wie der CT (wichtig für HomeKit).
+**Default ab hier: Weg A.** Abschnitt 3 führt dich GUI-only durch Weg A. Weg B steht in §4b / Anhang CLI.
+
+### HomeKit / mDNS bei Weg A (ehrlich)
+
+- Compose bleibt bei **`network_mode: host`**: der Docker-Container nutzt denselben Netzwerk-Stack wie der LXC → Port 4407 und ausgehende Verbindungen laufen über die LXC-IP.
+- TadoLocal pairt typischerweise mit **fester Bridge-IP** (`TADO_BRIDGE_IP`) + PIN — nicht zwingend über Bonjour-Discovery. Deshalb reicht gleiches LAN/VLAN + erreichbare IP oft aus.
+- Wenn Pairing trotzdem scheitert: Ping zur Bridge, Firewall, Slot frei? Erst dann Weg B oder macvlan erwägen (Troubleshooting).
 
 ### Netzwerk-Warnung: `vmbr0`
 
@@ -97,9 +114,11 @@ Compose nutzt **`network_mode: host`**: der Docker-Container teilt sich den Netz
 
 ---
 
-## 3. CT in der Proxmox-Web-UI anlegen
+## 3. CT in der Proxmox-Web-UI anlegen (Weg A)
 
 Öffne die Proxmox-Web-UI: `https://<dein-proxmox>:8006` und melde dich an.
+
+**Ziel dieses Abschnitts:** Unprivileged-CT mit Nesting + keyctl — Nesting-Checkbox ist **bedienbar**.
 
 ### 3.0 Template vorbereiten (falls noch keins da)
 
@@ -121,9 +140,9 @@ Ohne Template bricht der Assistent bei „Template“ ab.
 
 Es öffnet sich der Wizard mit mehreren Tabs (General → Template → Disks → CPU → Memory → Network → DNS → Confirm).
 
-### 3.2 Tab „General“ / Allgemein
+### 3.2 Tab „General“ / Allgemein — Weg A
 
-| Feld | Empfehlung Spike | Hinweis |
+| Feld | **Weg A (Spike-Default)** | Hinweis |
 |---|---|---|
 | **Node** | dein Proxmox-Node | meist vorausgefüllt |
 | **CT ID** | freie ID, z. B. `120` | darf nicht schon belegt sein |
@@ -131,10 +150,10 @@ Es öffnet sich der Wizard mit mehreren Tabs (General → Template → Disks →
 | **Resource Pool** | leer / Default | optional |
 | **Password** / Confirm | starkes root-Passwort | für Console/SSH |
 | **SSH public key** | optional dein Laptop-Key | praktisch für scp/git |
-| **Unprivileged container** | **deaktiviert / aus** | Spike = **privileged** |
-| **Nesting** | wenn hier schon sichtbar: **an** | sonst später unter Options → Features |
+| **Unprivileged container** | **aktiviert / an** | Damit Nesting in der UI wählbar bleibt |
+| **Nesting** | wenn im Wizard sichtbar: **an** | sonst sofort nach Create unter Options → Features (§4) |
 
-**Warnung:** Steht „Unprivileged container“ auf **an**, Docker-in-LXC und HomeKit werden deutlich schwieriger. Für den Spike bewusst **aus**.
+**Nicht tun:** Unprivileged **aus** schalten und dann erwarten, Nesting anhaken zu können — die Nesting-Checkbox wird dann oft **ausgegraut**. Das ist der Fallstrick aus dem Feedback.
 
 Weiter mit **Next**.
 
@@ -214,18 +233,20 @@ DNS muss funktionieren — Compose baut von GitHub (`github.com`).
 
 ### 3.9 Tab „Confirm“ / Bestätigen
 
-1. Zusammenfassung prüfen: **privileged**, Hostname `tadolocal`, Bridge `vmbr0`, RAM/Disk ok.
+1. Zusammenfassung prüfen: **Unprivileged = an**, Hostname `tadolocal`, Bridge `vmbr0`, RAM/Disk ok.
 2. Haken **Start after created** / **Nach Erstellung starten** setzen (praktisch).
 3. **Finish** / **Fertigstellen**.
 4. Task-Log unten beobachten → Status **OK**.
 
 Der neue CT erscheint links unter dem Node (Icon Container, ID z. B. `120`).
 
+**Als Nächstes Pflicht:** Features **nesting** + **keyctl** setzen (§4) — auch wenn Nesting schon im Wizard an war, keyctl oft erst unter Options.
+
 ---
 
-## 4. Features nesting/keyctl nachträglich setzen
+## 4. Features nesting/keyctl setzen (Weg A — GUI)
 
-Docker braucht im LXC typischerweise **Nesting** und **keyctl**.
+Docker-in-LXC braucht typischerweise **Nesting** und **keyctl**. Bei Weg A (unprivileged) sind beide in der GUI schaltbar.
 
 ### In der GUI (Proxmox 8)
 
@@ -244,7 +265,31 @@ Docker braucht im LXC typischerweise **Nesting** und **keyctl**.
 
 Unter **Options** sollte bei Features etwas wie `nesting=1;keyctl=1` stehen (Formulierung je nach UI-Sprache).
 
-**Hinweis:** „Privileged“ wird beim Anlegen gesetzt. Um nachträglich von unprivileged → privileged zu wechseln, ist oft ein Stop + Config-Eingriff nötig — einfacher: CT löschen und Wizard nochmal mit Unprivileged **aus**.
+Wenn Nesting **ausgegraut** ist: Du hast sehr wahrscheinlich einen **privileged** CT. Entweder CT neu mit Weg A anlegen, oder Weg B (§4b) nutzen — nicht an der ausgegrauten Checkbox festbeißen.
+
+---
+
+## 4b. Weg B — Privileged CT (Alternative, Nesting per CLI)
+
+Nur wenn du bewusst privileged willst oder Weg A bei Docker scheitert.
+
+1. Create CT wie in §3, aber **Unprivileged container = aus**.
+2. **Nesting in der GUI nicht erwarten** — oft ausgegraut; das ist ok.
+3. Auf dem **Proxmox-Host** (Shell des Nodes, nicht im CT):
+
+```bash
+CTID=120   # deine ID
+pct stop $CTID
+pct set $CTID --features nesting=1,keyctl=1
+# Config prüfen:
+grep -E 'unprivileged|features' /etc/pve/lxc/${CTID}.conf
+pct start $CTID
+```
+
+4. Hinweis: Bei privileged ist `nesting` teils redundant (Root im CT ist ohnehin mächtig); `pct set … features` setzt die Flags trotzdem zuverlässig, ohne GUI.
+5. Danach Docker/Compose wie ab §7 — gleiche `.env`, gleiches `network_mode: host`.
+
+**CLI-Only-Create für Weg B** steht im Anhang (§15A).
 
 ---
 
@@ -339,7 +384,7 @@ systemctl is-active docker
 
 Erwartung: Versionsnummern + `active`.
 
-**Falls Docker fehlschlägt:** §14 (nesting/keyctl/privileged, `journalctl -u docker -e`).
+**Falls Docker fehlschlägt:** §14 (Features nesting/keyctl, Weg A vs B, `journalctl -u docker -e`).
 
 ---
 
@@ -529,7 +574,8 @@ docker volume ls | grep tado
 | Symptom | Was tun |
 |---|---|
 | **Wizard: kein Template** | Node → Storage `local` → CT Templates → Template downloaden (§3.0). |
-| **Docker startet nicht** | Options → Features: nesting + keyctl; CT privileged? `journalctl -u docker -e`. CT neu starten. |
+| **Nesting ausgegraut** | CT ist privileged → normal. **Weg A:** neu mit Unprivileged **an**. **Weg B:** `pct set <ID> --features nesting=1,keyctl=1` auf dem Host (§4b). |
+| **Docker startet nicht** | Options → Features: nesting + keyctl (Weg A)? `journalctl -u docker -e`. CT neu starten. AppArmor/cgroup-Meldungen → Logs; ggf. Weg B testen. |
 | **Compose-Build / GitHub fail** | DNS im CT, `ping github.com`, Uhrzeit/NTP; Internetzugang. |
 | **UI nicht erreichbar** | `ss -tlnp \| grep 4407`, `docker compose ps`, Firewall Datacenter/Node/CT (§9). |
 | **Bridge nicht gefunden / kein Ping** | Gleiche Bridge `vmbr0`/VLAN? IP stimmt? Router-Isolation? Host-Netz in Compose aktiv? |
@@ -538,7 +584,7 @@ docker volume ls | grep tado
 | **Cloud-Auth hängt** | Auth im Browser wiederholen; `docker compose restart`; Hard-Refresh. |
 | **`/zones` leer** | Pairing + Cloud fertig? Logs; `/status` und UI prüfen. |
 | **Pairing nach Recreate weg** | Volume gelöscht (`down -v`)? Nicht löschen; Backup von `tadolocal-data` erwägen. |
-| **CT falsch unprivileged angelegt** | Neu anlegen mit Unprivileged **aus** ist oft schneller als Umbau. |
+| **HomeKit trotz host-Netz flaky (Weg A)** | Bridge-IP/PIN prüfen; gleiches VLAN; Logs. Erst dann Weg B oder macvlan (§2). |
 
 ### Nützliche Befehle (im CT)
 
@@ -558,7 +604,7 @@ ss -tlnp | grep 4407
 |---|---|
 | CT erstellen | **Datacenter → \<Node\> → Create CT** |
 | Template laden | **\<Node\> → local (Storage) → CT Templates / Content → Templates** |
-| Features | **\<CT\> → Options → Features** |
+| Features (nesting/keyctl) | **\<CT\> → Options → Features** (nur sinnvoll bei unprivileged / Weg A) |
 | Start/Stop | **\<CT\> → Start / Shutdown / Stop** |
 | Konsole | **\<CT\> → Console** |
 | IP sehen | **\<CT\> → Summary** |
@@ -570,7 +616,9 @@ ss -tlnp | grep 4407
 
 ### A) CT per CLI auf dem Proxmox-Host (optional)
 
-Wenn du die GUI nicht nutzen willst — IDs/Storage/Template anpassen:
+IDs/Storage/Template anpassen.
+
+**Weg A (Default) — unprivileged + nesting + keyctl:**
 
 ```bash
 CTID=120
@@ -585,12 +633,25 @@ pct create $CTID $TEMPLATE \
   --swap 512 \
   --rootfs ${STORAGE}:16 \
   --net0 name=eth0,bridge=${BRIDGE},ip=dhcp \
-  --unprivileged 0 \
+  --unprivileged 1 \
   --features nesting=1,keyctl=1 \
   --onboot 1 \
   --start 1
 
 pct enter $CTID
+```
+
+**Weg B — privileged** (Nesting nicht in der GUI erwarten):
+
+```bash
+pct create $CTID $TEMPLATE \
+  --hostname tadolocal \
+  --cores 2 --memory 2048 --swap 512 \
+  --rootfs ${STORAGE}:16 \
+  --net0 name=eth0,bridge=${BRIDGE},ip=dhcp \
+  --unprivileged 0 \
+  --features nesting=1,keyctl=1 \
+  --onboot 1 --start 1
 ```
 
 ### B) Windows-Docker (gleicher Compose, **nicht** Einstieg)
@@ -606,9 +667,9 @@ pct enter $CTID
 
 ## Kurz: Was du am Ende erledigt haben solltest
 
-1. Privileged CT mit nesting/keyctl an `vmbr0` (oder deinem LAN).  
+1. **Weg A:** Unprivileged CT mit nesting/keyctl an `vmbr0` (oder deinem LAN).  
 2. Spike-Dateien unter `/opt/tadolocal/deploy/tadolocal`.  
-3. Docker + `docker compose up -d --build`.  
+3. Docker + `docker compose up -d --build` (`network_mode: host`).  
 4. UI `:4407` → HomeKit pairen → Cloud-Auth.  
 5. `curl …/zones` liefert Daten; PIN aus `.env` entfernt; Volume intakt.  
 6. Kurz Go/No-Go notieren — **HA-Sync = Spike B**, nicht dieser Durchgang.
