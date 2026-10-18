@@ -1,0 +1,18 @@
+# Optional override: classic bridge networking (NOT recommended for first HomeKit pairing).
+#
+# Use only if host networking is unavailable (e.g. some Windows Docker Desktop setups)
+# or you accept that mDNS/discovery may fail and you must set a fixed Bridge IP.
+#
+# Start:
+#   docker compose -f docker-compose.yml -f docker-compose.bridge.yml up -d --build
+#
+# Caveats:
+# - Container gets a Docker-internal IP; outbound LAN usually works via NAT.
+# - HomeKit pairing / Bonjour discovery is often flaky across NAT.
+# - Prefer macvlan (own LAN IP) or host networking on Proxmox LXC.
+
+services:
+  tado-local:
+    network_mode: bridge
+    ports:
+      - "${TADO_PORT:-4407}:4407"

@@ -1,0 +1,6 @@
+.env
+*.env.local
+data/
+tado_data/
+*.db
+*.db-*

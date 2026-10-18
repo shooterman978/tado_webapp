@@ -1,0 +1,32 @@
+# TadoLocal Spike — Proxmox LXC (primary) / Windows Docker (appendix)
+#
+# Upstream: https://github.com/AmpScm/TadoLocal
+# Pinned release tag: 1.1.2 (commit d5a09976dfbec6d235c6b13cc136faad00de7642)
+# Official image is built from Upstream Dockerfile + entrypoint.sh (env-driven).
+#
+# Default network: host — required for reliable HomeKit / mDNS on the same LAN
+# as the Tado V3 bridge. See README for bridge/macvlan alternatives.
+
+services:
+  tado-local:
+    container_name: tado-local
+    image: tadolocal:1.1.2
+    build:
+      # Pin to Upstream release tag (reproducible rebuild)
+      context: https://github.com/AmpScm/TadoLocal.git#1.1.2
+    restart: unless-stopped
+    # Host networking: container shares the LXC (or host) stack → same LAN as Bridge
+    network_mode: host
+    env_file:
+      - .env
+    environment:
+      TADO_PORT: ${TADO_PORT:-4407}
+    volumes:
+      # Pairing state + SQLite history (survives recreate)
+      - tado-data:/data
+    # With network_mode: host, `ports:` is ignored — API listens on TADO_PORT on the host/LXC IP.
+    # For bridge networking instead, use: docker compose -f docker-compose.yml -f docker-compose.bridge.yml up -d
+
+volumes:
+  tado-data:
+    name: tadolocal-data
