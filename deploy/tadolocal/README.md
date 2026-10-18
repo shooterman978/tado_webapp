@@ -13,7 +13,7 @@ Upstream: [AmpScm/TadoLocal](https://github.com/AmpScm/TadoLocal) (Apache-2.0), 
 | **Docker Compose im LXC** (gewählt) | Gleicher Stack wie Windows-Testpfad; Upstream-Dockerfile/Entrypoint; Volume für Pairing-DB; einfache Rebuilds auf Tag | Nesting/`keyctl` nötig; etwas mehr Features auf dem CT |
 | Nativ `pip` + systemd im LXC | Kein Docker-in-LXC | Abweichung vom Dual-Deploy; manuelle Python-/Deps-Pflege |
 
-Für diesen Spike und das Dual-Deploy-Zielbild (Prod = Compose im Container) ist **Docker im Debian/Ubuntu-LXC** der robustere Weg.
+Für diesen Spike und das Dual-Deploy-Zielbild (Prod = Compose im Container) ist **Docker im Debian/Ubuntu-LXC** der robustere Weg. Gast-Template: **Debian 12 oder 13** Standard (oder Ubuntu) — nur Docker-Host; die App läuft im Image.
 
 ## Unprivileged vs. privileged
 

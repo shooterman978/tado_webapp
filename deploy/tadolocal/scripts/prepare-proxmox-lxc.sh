@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # Prepare a Debian/Ubuntu LXC guest for TadoLocal via Docker Compose.
+# Guest may be Debian 12 or 13 (or Ubuntu); only needs to run Docker — app is in the image.
 #
 # Run INSIDE the container as root (after CT create + feature flags on the host).
 # Does not create the CT itself — see README / Spike-Anleitung for `pct create`.

@@ -40,7 +40,7 @@
 - [ ] Proxmox-Web-UI erreichbar (`https://<proxmox-host>:8006`)
 - [ ] Rechte zum Anlegen eines **Containers (CT / LXC)**
 - [ ] Storage mit Platz (z. B. `local-lvm` oder dein üblicher Disk-Storage)
-- [ ] Linux-Container-Template vorhanden: **Debian 12** oder **Ubuntu 24.04** (amd64)
+- [ ] Linux-Container-Template vorhanden: **Debian 12 oder 13** Standard **oder** Ubuntu 24.04 (amd64) — Debian 12 war nur konservativer Default, **kein Muss**; 13 ist kein Blocker
 - [ ] Tado V3 **Internet Bridge** und Proxmox im **selben LAN/VLAN** (gleiche Broadcast-Domain)
 - [ ] Bridge aus **Apple Home** entfernt → HomeKit-Slot frei
 - [ ] **Kein** Home-Assistant-HomeKit-Pairing zur Tado-Bridge
@@ -125,9 +125,11 @@ Deshalb führt diese Anleitung dich **nicht** in die Sackgasse „Unprivileged a
 1. Linke Seite: **Datacenter** → deinen **Node** (Hostname des Servers) anklicken.
 2. Node-Menü: **local** (oder Storage, der Templates hält) → **CT Templates** / **Inhalt** (Content).
 3. Oben **Templates** / **Vorlagen** → gewünschtes Image laden, z. B.:
-   - `debian-12-standard_….tar.zst`
+   - `debian-12-standard_….tar.zst` **oder** `debian-13-standard_….tar.zst` (beides ok)
    - oder `ubuntu-24.04-standard_….tar.zst`
 4. Download abwarten, bis der Status fertig ist.
+
+**Hinweis Template-Wahl:** Das LXC-Gast-OS muss nur **Docker** tragen. TadoLocal selbst läuft im **Container-Image** (Upstream-Build). Deshalb ist **Debian 12 oder 13 Standard** fine — 12 war in früheren Texten nur der konservative Default, kein Muss. Kein Blocker, wenn du 13 wählst.
 
 Ohne Template bricht der Assistent bei „Template“ ab.
 
@@ -162,7 +164,7 @@ Weiter mit **Next**.
 | Feld | Empfehlung |
 |---|---|
 | **Storage** | Storage, in dem das Template liegt (oft `local`) |
-| **Template** | Debian 12 standard **oder** Ubuntu 24.04 standard (amd64) |
+| **Template** | **Debian 12 oder 13** standard **oder** Ubuntu 24.04 standard (amd64) — 13 ok, kein Muss für 12 |
 
 **Next**.
 
@@ -624,7 +626,7 @@ IDs/Storage/Template anpassen.
 CTID=120
 STORAGE=local-lvm
 BRIDGE=vmbr0
-TEMPLATE=local:vztmpl/debian-12-standard_12.7-1_amd64.tar.zst   # pveam available / ls
+TEMPLATE=local:vztmpl/debian-13-standard_….tar.zst   # oder debian-12-…; pveam available / ls
 
 pct create $CTID $TEMPLATE \
   --hostname tadolocal \
