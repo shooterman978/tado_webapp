@@ -21,6 +21,25 @@ function optionalEnv(name: string): string | undefined {
   return value;
 }
 
+function envNumber(name: string, fallback: number): number {
+  const raw = process.env[name];
+  if (raw === undefined || raw === "") {
+    return fallback;
+  }
+  const n = Number(raw);
+  return Number.isFinite(n) ? n : fallback;
+}
+
+type OutdoorProvider = "brightsky" | "openmeteo" | "stub";
+
+function outdoorProvider(name: string, fallback: OutdoorProvider): OutdoorProvider {
+  const raw = (process.env[name] ?? fallback).toLowerCase();
+  if (raw === "brightsky" || raw === "openmeteo" || raw === "stub") {
+    return raw;
+  }
+  return fallback;
+}
+
 export const config = {
   host: env("API_HOST", "0.0.0.0"),
   port: Number(env("API_PORT", "3080")),
@@ -47,6 +66,23 @@ export const config = {
    * Schedules are never auto-fetched on room enter — only via explicit sync.
    */
   cloudAutoSyncHours: Number(env("CLOUD_AUTO_SYNC_HOURS", "4")),
+  /**
+   * Outdoor temperature for heat-up learning.
+   * Primary: Bright Sky (DWD) for Lünen; Open-Meteo only as fallback.
+   * Never Tado Cloud.
+   */
+  outdoorProvider: outdoorProvider("OUTDOOR_PROVIDER", "brightsky"),
+  outdoorFallback: outdoorProvider("OUTDOOR_FALLBACK", "openmeteo") as OutdoorProvider | null,
+  outdoorLat: envNumber("OUTDOOR_LAT", 51.6167),
+  outdoorLon: envNumber("OUTDOOR_LON", 7.5281),
+  outdoorStubTempC: envNumber("OUTDOOR_STUB_TEMP_C", 8),
+  /** Model 0 EMA α (math-playground style). */
+  heatupEmaAlpha: envNumber("HEATUP_EMA_ALPHA", 0.3),
+  /** Asymmetric bias minutes (Comfort-Start pattern: prefer early). */
+  heatupOffsetMin: envNumber("HEATUP_OFFSET_MIN", 3),
+  heatupManualPreheatMinutes: envNumber("HEATUP_MANUAL_PREHEAT_MINUTES", 30),
+  heatupMinSamplesForUi: envNumber("HEATUP_MIN_SAMPLES_UI", 3),
+  heatupMinSamplesForModel3: envNumber("HEATUP_MIN_SAMPLES_MODEL3", 7),
   /**
    * Extension points:
    * - DATABASE_URL → learning samples, sync audit (later)

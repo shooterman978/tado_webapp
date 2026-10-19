@@ -8,6 +8,7 @@
     "start": "node dist/index.js",
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "tsx --test src/modules/heatup/*.test.ts",
     "lint": "echo \"no lint configured yet\""
   },
   "dependencies": {

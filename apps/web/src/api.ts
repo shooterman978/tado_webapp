@@ -12,6 +12,8 @@ import type {
   CloudStatus,
   CloudSyncStatus,
   HealthStatus,
+  HeatupPrediction,
+  HeatupRoomSummary,
   OpenWindowSettings,
   ZoneSchedule,
   ZoneScheduleUpdate,
@@ -329,3 +331,38 @@ export function saveCalendarEventSelection(
     selectedUids,
   });
 }
+
+export function fetchHeatupSummary(
+  roomId: string,
+  opts?: { currentTempC?: number | null; targetTempC?: number },
+): Promise<HeatupRoomSummary> {
+  const q = new URLSearchParams();
+  if (opts?.currentTempC != null) {
+    q.set("currentTempC", String(opts.currentTempC));
+  }
+  if (opts?.targetTempC != null) {
+    q.set("targetTempC", String(opts.targetTempC));
+  }
+  const qs = q.toString();
+  return getJson<HeatupRoomSummary>(
+    `/api/heatup/rooms/${encodeURIComponent(roomId)}${qs ? `?${qs}` : ""}`,
+  );
+}
+
+export function fetchHeatupPrediction(
+  roomId: string,
+  targetTempC: number,
+  opts?: { currentTempC?: number | null; readyAt?: string },
+): Promise<HeatupPrediction> {
+  const q = new URLSearchParams({ targetTempC: String(targetTempC) });
+  if (opts?.currentTempC != null) {
+    q.set("currentTempC", String(opts.currentTempC));
+  }
+  if (opts?.readyAt) {
+    q.set("readyAt", opts.readyAt);
+  }
+  return getJson<HeatupPrediction>(
+    `/api/heatup/rooms/${encodeURIComponent(roomId)}/prediction?${q}`,
+  );
+}
+

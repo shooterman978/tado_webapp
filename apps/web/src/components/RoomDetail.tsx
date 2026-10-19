@@ -4,10 +4,11 @@
  */
 
 import { useEffect, useRef, useState } from "react";
-import type { Zone } from "@heizplan/shared";
+import type { HeatupPrediction, Zone } from "@heizplan/shared";
 import {
   clearZoneOverlay,
   fetchCloudSyncStatus,
+  fetchHeatupSummary,
   setZonePower,
   setZoneTemperature,
 } from "../api";
@@ -45,6 +46,11 @@ interface RoomDetailProps {
 
 const MIN_T = 5;
 const MAX_T = 25;
+
+function formatRecommendTime(iso: string): string {
+  const d = new Date(iso);
+  return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+}
 
 function tempFromY(clientY: number, rect: DOMRect): number {
   const ratio = 1 - (clientY - rect.top) / rect.height;
@@ -84,6 +90,7 @@ export function RoomDetail({
   const [error, setError] = useState<string | null>(null);
   const [homeSyncedAt, setHomeSyncedAt] = useState<string | null>(null);
   const [scheduleSyncedAt, setScheduleSyncedAt] = useState<string | null>(null);
+  const [heatup, setHeatup] = useState<HeatupPrediction | null>(null);
   const trackRef = useRef<HTMLDivElement>(null);
   const dragging = useRef(false);
 
@@ -114,6 +121,51 @@ export function RoomDetail({
       cancelled = true;
     };
   }, [zone.id]);
+
+  useEffect(() => {
+    if (
+      zone.heatupHint?.recommendedStartAt &&
+      zone.heatupHint.estimatedMinutes != null
+    ) {
+      setHeatup({
+        roomId: zone.id,
+        targetTempC: zone.targetTempC ?? 22,
+        currentTempC: zone.currentTempC,
+        outdoorTempC: zone.heatupHint.outdoorTempC,
+        outdoorProvider: null,
+        estimatedMinutes: zone.heatupHint.estimatedMinutes,
+        recommendedStartAt: zone.heatupHint.recommendedStartAt,
+        readyAt: new Date().toISOString(),
+        confidence: zone.heatupHint.sampleCount >= 7 ? "high" : "medium",
+        method: zone.heatupHint.method,
+        sampleCount: zone.heatupHint.sampleCount,
+        message: zone.heatupHint.message,
+      });
+      return;
+    }
+
+    let cancelled = false;
+    void (async () => {
+      try {
+        const summary = await fetchHeatupSummary(zone.id, {
+          currentTempC: zone.currentTempC,
+          targetTempC: zone.targetTempC ?? 22,
+        });
+        if (!cancelled && summary.readyForUi && summary.latestPrediction) {
+          setHeatup(summary.latestPrediction);
+        } else if (!cancelled) {
+          setHeatup(null);
+        }
+      } catch {
+        if (!cancelled) {
+          setHeatup(null);
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [zone.id, zone.currentTempC, zone.targetTempC, zone.heatupHint]);
 
   function formatSyncStamp(iso: string | null): string {
     if (!iso) {
@@ -248,6 +300,22 @@ export function RoomDetail({
         Zeitplan {formatSyncStamp(scheduleSyncedAt)}
         {" (Sync im Zeitplan)"}
       </p>
+
+      {heatup?.recommendedStartAt && heatup.estimatedMinutes != null ? (
+        <p className="heatup-hint" role="status">
+          <span className="heatup-hint__label">Start empfohlen um</span>{" "}
+          <strong>{formatRecommendTime(heatup.recommendedStartAt)}</strong>
+          <span className="heatup-hint__detail">
+            Vorlauf ~{Math.round(heatup.estimatedMinutes)} min
+            {heatup.outdoorTempC != null
+              ? ` · ${Math.round(heatup.outdoorTempC)}°C außen`
+              : ""}
+            {heatup.method === "model0" || heatup.method === "model3"
+              ? ` · ${heatup.method === "model0" ? "Model 0" : "Model 3"}`
+              : ""}
+          </span>
+        </p>
+      ) : null}
 
       {zone.windowOpen ? (
         <div className="window-banner" role="status">

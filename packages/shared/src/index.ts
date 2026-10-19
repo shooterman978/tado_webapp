@@ -532,8 +532,85 @@ export interface CalendarStatusResponse {
   selectedUids: string[];
 }
 
+/** @deprecated Prefer HeatupRoomSummary / HeatupPrediction. */
 export interface HeatupLearningHook {
   roomId: string;
   sampleCount: number;
   estimatedPreheatMinutes: number | null;
+}
+
+/** Outdoor temperature provider used for heat-up features. */
+export type OutdoorProviderId = "brightsky" | "openmeteo" | "stub";
+
+export type HeatupSampleQuality = "ok" | "rejected";
+
+export type HeatupRejectReason =
+  | "window_open"
+  | "manual_abort"
+  | "target_changed"
+  | "too_short"
+  | "stalled"
+  | "delta_too_small";
+
+/** One completed heat-up observation for a room. */
+export interface HeatupSample {
+  id: string;
+  roomId: string;
+  startedAt: string;
+  endedAt: string;
+  startTempC: number;
+  targetTempC: number;
+  deltaTC: number;
+  outdoorTempC: number | null;
+  durationMinutes: number;
+  quality: HeatupSampleQuality;
+  rejectReason?: HeatupRejectReason | null;
+}
+
+export type HeatupConfidence = "low" | "medium" | "high" | "none";
+
+/** Prediction backend: Model 0 EMA → Model 3 OLS → manual fallback. */
+export type HeatupPredictMethod =
+  | "model0"
+  | "model3"
+  | "manual"
+  | "bucket"
+  | "none";
+
+/** Recommended preheat timing for a target (e.g. Bad 07:00 → 22°C). */
+export interface HeatupPrediction {
+  roomId: string;
+  targetTempC: number;
+  currentTempC: number | null;
+  outdoorTempC: number | null;
+  outdoorProvider: OutdoorProviderId | null;
+  estimatedMinutes: number | null;
+  /** ISO time to start heating so the room reaches target by `readyAt`. */
+  recommendedStartAt: string | null;
+  readyAt: string;
+  confidence: HeatupConfidence;
+  method: HeatupPredictMethod;
+  sampleCount: number;
+  message: string;
+}
+
+export interface HeatupRoomSummary {
+  roomId: string;
+  okSampleCount: number;
+  rejectedSampleCount: number;
+  lastSampleAt: string | null;
+  /** True when UI may show “Start empfohlen um …”. */
+  readyForUi: boolean;
+  latestPrediction: HeatupPrediction | null;
+}
+
+export interface HeatupStatus {
+  provider: OutdoorProviderId;
+  fallback: OutdoorProviderId | null;
+  lat: number;
+  lon: number;
+  lastOutdoorTempC: number | null;
+  lastOutdoorAt: string | null;
+  lastOutdoorSource: OutdoorProviderId | null;
+  message: string;
 }

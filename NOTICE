@@ -1,0 +1,21 @@
+Heat-up learning algorithm notes
+================================
+
+Model 0 (EMA recovery rate) and Model 3 (weather-compensated linear /
+multi-factor OLS with weather factor WF) formulas are reimplemented in
+TypeScript based on the educational descriptions in:
+
+  https://github.com/bbartling/hvac-optimal-start-math-playground
+  License: MIT
+
+No upstream source files were copied. Lifecycle design patterns
+(arrival-bounded learning, observation-only on constrained cycles,
+asymmetric early bias) informed by:
+
+  https://github.com/dbullendsl/hvac-comfort-start
+  License: MIT
+
+  (design patterns only — no Home Assistant / pyscript code.)
+
+Outdoor weather: Bright Sky (DWD Open Data) + Open-Meteo fallback.
+No Home Assistant custom_components code is included.

@@ -45,6 +45,13 @@ services:
       TADO_BRIDGE_PORT: ${TADO_BRIDGE_PORT:-80}
       DATABASE_URL: postgres://heizplan:${POSTGRES_PASSWORD:-heizplan}@db:5432/heizplan
       APP_SESSION_SECRET: ${APP_SESSION_SECRET:-change-me-to-a-long-random-string}
+      OUTDOOR_PROVIDER: ${OUTDOOR_PROVIDER:-brightsky}
+      OUTDOOR_FALLBACK: ${OUTDOOR_FALLBACK:-openmeteo}
+      OUTDOOR_LAT: ${OUTDOOR_LAT:-51.6167}
+      OUTDOOR_LON: ${OUTDOOR_LON:-7.5281}
+      HEATUP_EMA_ALPHA: ${HEATUP_EMA_ALPHA:-0.3}
+      HEATUP_OFFSET_MIN: ${HEATUP_OFFSET_MIN:-3}
+      HEATUP_MANUAL_PREHEAT_MINUTES: ${HEATUP_MANUAL_PREHEAT_MINUTES:-30}
     volumes:
       - heizplan_bridge:/data/bridge
     depends_on:

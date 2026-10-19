@@ -589,6 +589,38 @@ input {
   letter-spacing: 0;
 }
 
+.heatup-hint {
+  margin: 0 0 1rem;
+  padding: 0.55rem 0.75rem;
+  font-size: 0.85rem;
+  line-height: 1.35;
+  color: rgba(255, 255, 255, 0.88);
+  background: rgba(0, 0, 0, 0.22);
+  border-radius: 0.4rem;
+}
+
+.heatup-hint__label {
+  opacity: 0.8;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  font-size: 0.72rem;
+  font-weight: 600;
+}
+
+.heatup-hint strong {
+  font-weight: 750;
+  margin-right: 0.35rem;
+}
+
+.heatup-hint__detail {
+  display: block;
+  margin-top: 0.2rem;
+  font-size: 0.78rem;
+  opacity: 0.75;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
 .room-detail__soll-row {
   display: flex;
   align-items: center;

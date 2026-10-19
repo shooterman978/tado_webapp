@@ -11,6 +11,7 @@ import { bridgeRoutes } from "./routes/bridge.js";
 import { calendarRoutes } from "./routes/calendar.js";
 import { cloudRoutes } from "./routes/cloud.js";
 import { healthRoutes } from "./routes/health.js";
+import { heatupRoutes } from "./routes/heatup.js";
 import { zonesRoutes } from "./routes/zones.js";
 
 export function createApp(): Hono {
@@ -31,6 +32,7 @@ export function createApp(): Hono {
   app.route("/api/bridge", bridgeRoutes);
   app.route("/api/cloud", cloudRoutes);
   app.route("/api/calendar", calendarRoutes);
+  app.route("/api/heatup", heatupRoutes);
 
   app.get("/", (c) =>
     c.json({
@@ -49,6 +51,8 @@ export function createApp(): Hono {
         "/api/calendar/status",
         "/api/calendar/rules",
         "/api/calendar/evaluate",
+        "/api/heatup/status",
+        "/api/heatup/rooms/:roomId/prediction",
       ],
     }),
   );
