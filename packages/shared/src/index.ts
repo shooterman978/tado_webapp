@@ -74,8 +74,13 @@ export interface Zone {
   nameSource?: ZoneNameSource;
 }
 
-/** Persisted open-window auto-off preferences (no paywall). */
+/** Persisted open-window preferences (local, no paywall). */
 export interface OpenWindowSettings {
+  /**
+   * When false, open windows are ignored (no badges, no auto-off).
+   * Default true — show detection even if auto-off is off.
+   */
+  detectionEnabled: boolean;
   /** Default for all rooms unless overridden per room. */
   globalAutoOff: boolean;
   /**

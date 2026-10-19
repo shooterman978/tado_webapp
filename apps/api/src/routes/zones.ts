@@ -34,6 +34,7 @@ zonesRoutes.get("/settings/open-window", async (c) => {
 zonesRoutes.put("/settings/open-window", async (c) => {
   try {
     const body = await c.req.json<{
+      detectionEnabled?: boolean;
       globalAutoOff?: boolean;
       resumeMode?: "restore_setpoint" | "clear_overlay";
       rooms?: Record<string, { autoOff?: boolean }>;

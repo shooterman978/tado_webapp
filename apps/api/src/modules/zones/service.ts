@@ -483,6 +483,10 @@ export async function updateOpenWindowSettings(
 ): Promise<OpenWindowSettings> {
   const current = await getOpenWindowSettings();
   return saveOpenWindowSettings(config.bridgeDataDir, {
+    detectionEnabled:
+      typeof patch.detectionEnabled === "boolean"
+        ? patch.detectionEnabled
+        : current.detectionEnabled !== false,
     globalAutoOff:
       typeof patch.globalAutoOff === "boolean"
         ? patch.globalAutoOff

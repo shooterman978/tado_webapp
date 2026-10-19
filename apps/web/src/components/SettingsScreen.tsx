@@ -1,5 +1,5 @@
 /**
- * Settings shell — grouped lists from screenshots 03/04 + open-window auto-off.
+ * Settings shell — grouped lists from screenshots 03/04 + open-window (plain language).
  * @package @heizplan/web
  */
 
@@ -21,6 +21,16 @@ import { CloudLinkPanel } from "./CloudLinkPanel";
 import { CloudQuotaBadge, formatQuotaLabel } from "./CloudQuotaBadge";
 import { CloudRequestLog } from "./CloudRequestLog";
 import { ChevronIcon } from "./icons";
+
+function openWindowSkillMeta(ow: OpenWindowSettings | null): string {
+  if (!ow || ow.detectionEnabled === false) {
+    return "Aus";
+  }
+  if (ow.globalAutoOff) {
+    return "Heizung aus";
+  }
+  return "Nur Anzeige";
+}
 
 interface SettingsScreenProps {
   health: HealthStatus | null;
@@ -160,6 +170,132 @@ export function SettingsScreen({
         </button>
       </div>
 
+      <p className="settings__section-label">Fenster offen</p>
+      <div className="settings-group settings-group--window">
+        <div className="settings-explain" role="note">
+          <strong>Was passiert?</strong>
+          <span>
+            Wenn ein Fenster offen ist, siehst du es am Raum. Optional schaltet die Heizung
+            dort aus — und wieder ein, sobald das Fenster zu ist.
+          </span>
+        </div>
+
+        <label className="settings-row settings-row--toggle">
+          <span className="settings-row__circle" style={{ background: "#5dade2" }} aria-hidden="true">
+            F
+          </span>
+          <span className="settings-row__label">
+            Fenster erkennen
+            <small className="settings-row__sub">Anzeige auf der Startseite und im Raum</small>
+          </span>
+          <input
+            type="checkbox"
+            checked={ow?.detectionEnabled !== false}
+            disabled={!ow || owBusy}
+            onChange={(e) => void patchOw({ detectionEnabled: e.target.checked })}
+          />
+        </label>
+
+        <label
+          className={
+            ow?.detectionEnabled === false
+              ? "settings-row settings-row--toggle is-muted"
+              : "settings-row settings-row--toggle"
+          }
+        >
+          <span className="settings-row__circle" style={{ background: "#1b5e54" }} aria-hidden="true">
+            H
+          </span>
+          <span className="settings-row__label">
+            Heizung automatisch ausschalten
+            <small className="settings-row__sub">
+              Nur in Räumen mit offenem Fenster — spart Energie
+            </small>
+          </span>
+          <input
+            type="checkbox"
+            checked={ow?.globalAutoOff ?? false}
+            disabled={!ow || owBusy || ow.detectionEnabled === false}
+            onChange={(e) => void patchOw({ globalAutoOff: e.target.checked })}
+          />
+        </label>
+
+        {ow && ow.detectionEnabled !== false && ow.globalAutoOff ? (
+          <div className="settings-rooms">
+            <p className="settings-rooms__label">In diesen Räumen</p>
+            {(zones?.zones ?? []).length === 0 ? (
+              <p className="settings__hint settings__hint--inline">Noch keine Räume geladen.</p>
+            ) : (
+              (zones?.zones ?? []).map((zone) => {
+                const room = ow.rooms[zone.id];
+                const effective =
+                  typeof room?.autoOff === "boolean" ? room.autoOff : true;
+                return (
+                  <label key={zone.id} className="settings-row settings-row--toggle">
+                    <span className="settings-row__icon" aria-hidden="true">
+                      ·
+                    </span>
+                    <span className="settings-row__label">
+                      {zone.name}
+                      {zone.windowOpen ? (
+                        <small className="settings-row__sub">gerade offen</small>
+                      ) : null}
+                    </span>
+                    <input
+                      type="checkbox"
+                      checked={effective}
+                      disabled={owBusy}
+                      onChange={(e) => setRoomAutoOff(zone.id, e.target.checked)}
+                    />
+                  </label>
+                );
+              })
+            )}
+          </div>
+        ) : null}
+
+        <details className="settings-advanced">
+          <summary>Erweitert</summary>
+          <p className="settings-advanced__hint">
+            Für Technik-Interessierte. Im Alltag reichen die Schalter oben.
+          </p>
+          <fieldset className="settings-resume" disabled={!ow || owBusy}>
+            <legend className="settings-resume__legend">
+              Wenn das Fenster wieder zu ist
+            </legend>
+            <label className="settings-resume__option">
+              <input
+                type="radio"
+                name="resumeMode"
+                checked={ow?.resumeMode !== "clear_overlay"}
+                onChange={() => setResumeMode("restore_setpoint")}
+              />
+              <span>
+                Frühere Temperatur wieder einstellen
+                <small>Empfohlen — so warm wie vorher</small>
+              </span>
+            </label>
+            <label className="settings-resume__option">
+              <input
+                type="radio"
+                name="resumeMode"
+                checked={ow?.resumeMode === "clear_overlay"}
+                onChange={() => setResumeMode("clear_overlay")}
+              />
+              <span>
+                Dem Zeitplan folgen
+                <small>Heizung wie im normalen Tagesplan</small>
+              </span>
+            </label>
+          </fieldset>
+        </details>
+      </div>
+      {owError ? (
+        <p className="error-state" role="alert">
+          {owError}
+        </p>
+      ) : null}
+
       <p className="settings__section-label">Zuhause</p>
       <div className="settings-group">
         <Row label="Räume & Geräte" glyph="R" />
@@ -255,96 +391,17 @@ export function SettingsScreen({
         <CloudRequestLog />
       </div>
 
-      <p className="settings__section-label">Fenster offen</p>
-      <div className="settings-group">
-        <label className="settings-row settings-row--toggle">
-          <span className="settings-row__circle" style={{ background: "#5dade2" }} aria-hidden="true">
-            F
-          </span>
-          <span className="settings-row__label">
-            Bei offenem Fenster Heizung automatisch ausschalten
-          </span>
-          <input
-            type="checkbox"
-            checked={ow?.globalAutoOff ?? false}
-            disabled={!ow || owBusy}
-            onChange={(e) => void patchOw({ globalAutoOff: e.target.checked })}
-          />
-        </label>
-        <fieldset className="settings-resume" disabled={!ow || owBusy}>
-          <legend className="settings-resume__legend">Nach Schließen wiederherstellen</legend>
-          <label className="settings-resume__option">
-            <input
-              type="radio"
-              name="resumeMode"
-              checked={ow?.resumeMode !== "clear_overlay"}
-              onChange={() => setResumeMode("restore_setpoint")}
-            />
-            <span>
-              Vorherigen Soll wiederherstellen
-              <small>Default — speichert Zieltemperatur vor Auto-Aus</small>
-            </span>
-          </label>
-          <label className="settings-resume__option">
-            <input
-              type="radio"
-              name="resumeMode"
-              checked={ow?.resumeMode === "clear_overlay"}
-              onChange={() => setResumeMode("clear_overlay")}
-            />
-            <span>
-              Zeitplan fortsetzen
-              <small>Overlay clear / HAP Schedule-Approximation</small>
-            </span>
-          </label>
-        </fieldset>
-        {(zones?.zones ?? []).map((zone) => {
-          const room = ow?.rooms[zone.id];
-          const effective =
-            typeof room?.autoOff === "boolean" ? room.autoOff : Boolean(ow?.globalAutoOff);
-          return (
-            <label key={zone.id} className="settings-row settings-row--toggle">
-              <span className="settings-row__icon" aria-hidden="true">
-                ·
-              </span>
-              <span className="settings-row__label">
-                {zone.name}
-                {zone.windowOpen ? " · offen" : ""}
-              </span>
-              <input
-                type="checkbox"
-                checked={effective}
-                disabled={!ow || owBusy}
-                onChange={(e) => setRoomAutoOff(zone.id, e.target.checked)}
-              />
-            </label>
-          );
-        })}
-      </div>
-      {owError ? (
-        <p className="error-state" role="alert">
-          {owError}
-        </p>
-      ) : null}
-      <p className="settings__hint">
-        Lokal ohne Auto-Assist-Paywall. Erkennung: HAP ContactSensor (falls vorhanden), optional
-        Cloud <code>openWindowDetected</code>, sonst Fixture/manuell via API. Resume-Default:
-        vorherigen Soll.
-      </p>
-
       <p className="settings__section-label">Skills</p>
       <div className="settings-group">
         <Row label="Auto-Assist" glyph="A" circle="#1b5e54" muted />
         <Row label="Geofencing" glyph="G" circle="#2f6fed" muted />
         <Row label="Energy IQ" glyph="E" circle="#7cb342" muted />
         <Row
-          label="Fenster-Offen-Erkennung"
+          label="Fenster offen"
           glyph="F"
           circle="#5dade2"
           trailing={
-            <span className="settings-row__meta">
-              {ow?.globalAutoOff ? "Auto-Aus an" : "Aktiv"}
-            </span>
+            <span className="settings-row__meta">{openWindowSkillMeta(ow)}</span>
           }
         />
         <Row

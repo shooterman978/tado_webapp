@@ -33,6 +33,7 @@ export interface AutoOffSnapshot {
 }
 
 const DEFAULT_SETTINGS: OpenWindowSettings = {
+  detectionEnabled: true,
   globalAutoOff: false,
   resumeMode: "restore_setpoint",
   rooms: {},
@@ -73,6 +74,8 @@ export async function loadOpenWindowSettings(
     {},
   );
   settingsCache = {
+    // Missing key → enabled (legacy files pre-date this flag).
+    detectionEnabled: loaded.detectionEnabled !== false,
     globalAutoOff: Boolean(loaded.globalAutoOff),
     resumeMode:
       loaded.resumeMode === "clear_overlay"
@@ -88,6 +91,7 @@ export async function saveOpenWindowSettings(
   next: OpenWindowSettings,
 ): Promise<OpenWindowSettings> {
   const normalised: OpenWindowSettings = {
+    detectionEnabled: next.detectionEnabled !== false,
     globalAutoOff: Boolean(next.globalAutoOff),
     resumeMode:
       next.resumeMode === "clear_overlay"
@@ -186,6 +190,9 @@ export function isAutoOffEnabled(
   settings: OpenWindowSettings,
   zoneId: string,
 ): boolean {
+  if (settings.detectionEnabled === false) {
+    return false;
+  }
   const room = settings.rooms[zoneId];
   if (room && typeof room.autoOff === "boolean") {
     return room.autoOff;

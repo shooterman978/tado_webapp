@@ -46,7 +46,18 @@ export async function enrichZonesWithWindowState(
     }
   }
 
+  const detectionOn = settings.detectionEnabled !== false;
+
   return zones.map((zone) => {
+    if (!detectionOn) {
+      return {
+        ...zone,
+        windowOpen: false,
+        windowSource: "none" as const,
+        windowDetectedAt: null,
+        openWindowAutoOffActive: false,
+      };
+    }
     const resolved = resolveWindow(zone, overrides, cloudOpen, serialToCloudZone);
     const snapshotActive = false; // filled after auto-off pass
     return {
