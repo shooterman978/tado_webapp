@@ -10,7 +10,7 @@ export const HEATUP_DEFAULTS = {
   minDeltaC: 0.5,
   /** Ist within this of Soll counts as reached (Arrival-Stop). */
   reachToleranceC: 0.3,
-  /** Sessions shorter than this are rejected as noise. */
+  /** Sessions shorter than this are rejected as noise (overridable via env). */
   minDurationMinutes: 2,
   /** Sessions longer than this without reach → stalled. */
   maxDurationMinutes: 240,

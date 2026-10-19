@@ -45,6 +45,7 @@ describe("outdoor provider", () => {
       lon: 7.5281,
       stubTempC: 8,
       fetchImpl,
+      forceRefresh: true,
     });
     assert.equal(reading.source, "openmeteo");
     assert.equal(reading.tempC, 3.2);

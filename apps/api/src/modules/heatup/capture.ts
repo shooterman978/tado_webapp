@@ -9,6 +9,7 @@
  */
 
 import type { Zone } from "@heizplan/shared";
+import { config } from "../../config.js";
 import { HEATUP_DEFAULTS } from "./defaults.js";
 import {
   appendSample,
@@ -19,6 +20,12 @@ import {
   type ActiveHeatupSession,
 } from "./sample-store.js";
 import { tryOutdoorTemperature } from "./outdoor.js";
+
+function minDurationMinutes(): number {
+  return config.heatupMinDurationMinutes > 0
+    ? config.heatupMinDurationMinutes
+    : HEATUP_DEFAULTS.minDurationMinutes;
+}
 
 export interface ObserveResult {
   roomId: string;
@@ -111,9 +118,23 @@ async function continueSession(
     session.windowOpenSeen = true;
   }
 
-  // Manual abort: power off / no target.
-  if (target == null || (zone.heatingPowerPercent === 0 && current != null && current < session.targetTempC - HEATUP_DEFAULTS.reachToleranceC)) {
-    return finalizeReject(dataDir, session, nowIso, "manual_abort");
+  // Manual abort: power off / no target / open-window auto-off while still cold.
+  const stillCold =
+    current != null &&
+    current < session.targetTempC - HEATUP_DEFAULTS.reachToleranceC;
+  if (
+    target == null ||
+    zone.openWindowAutoOffActive === true ||
+    (stillCold && zone.heatingPowerPercent === 0)
+  ) {
+    return finalizeReject(
+      dataDir,
+      session,
+      nowIso,
+      zone.openWindowAutoOffActive || zone.windowOpen
+        ? "window_open"
+        : "manual_abort",
+    );
   }
 
   // Target changed significantly.
@@ -148,7 +169,7 @@ async function continueSession(
 
     // Reached target.
     if (current >= session.targetTempC - HEATUP_DEFAULTS.reachToleranceC) {
-      if (duration < HEATUP_DEFAULTS.minDurationMinutes) {
+      if (duration < minDurationMinutes()) {
         return finalizeReject(dataDir, session, nowIso, "too_short");
       }
       const delta = session.targetTempC - session.startTempC;

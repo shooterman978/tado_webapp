@@ -12,8 +12,34 @@ import {
   getConnectionStatus,
   maybeBootstrapFromEnv,
 } from "./modules/calendar/service.js";
+import { maybeSeedOnBoot } from "./modules/heatup/service.js";
+import { tryOutdoorTemperature } from "./modules/heatup/outdoor.js";
 
 const app = createApp();
+
+void (async () => {
+  try {
+    await maybeSeedOnBoot();
+  } catch (err) {
+    console.warn(
+      "[heatup] boot seed failed:",
+      err instanceof Error ? err.message : err,
+    );
+  }
+  try {
+    const outdoor = await tryOutdoorTemperature();
+    if (outdoor) {
+      console.info(
+        `[heatup] outdoor ${outdoor.tempC.toFixed(1)}°C via ${outdoor.source} (${config.outdoorLat},${config.outdoorLon})`,
+      );
+    }
+  } catch (err) {
+    console.warn(
+      "[heatup] outdoor warm-up failed:",
+      err instanceof Error ? err.message : err,
+    );
+  }
+})();
 
 serve(
   {
@@ -24,6 +50,9 @@ serve(
   (info) => {
     console.log(
       `[heizplan-api] listening on http://${info.address}:${info.port} (${config.nodeEnv})`,
+    );
+    console.log(
+      `[heizplan-api] heatup=${config.heatupEnabled ? "on" : "off"} outdoor=${config.outdoorProvider}→${config.outdoorFallback ?? "none"}`,
     );
   },
 );

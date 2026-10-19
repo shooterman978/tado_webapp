@@ -9,7 +9,9 @@ PWA (Heizplan) → API → Bridge-Schicht (HomeKit / hap-controller) → Tado V3
                          └── Sync später → Home Assistant (bestehende VM)
 ```
 
-**Nicht enthalten:** TadoLocal, Kalender/Learning (nur Erweiterungspunkte), Secrets.
+**Heat-up-Learning:** lokal Model 0→3, Outdoor Bright Sky (Lünen); Capture an Zone-Poll. Siehe API `/api/heatup/*` und Env `OUTDOOR_*` / `HEATUP_*`. Kalender erst nach Schedule+Quota.
+
+**Nicht enthalten:** TadoLocal, Kalender (erst später), Secrets.
 
 Spike-Artefakte unter `deploy/tadolocal/` und [PR #1](https://github.com/shooterman978/tado_webapp/pull/1) bleiben Lernreferenz — dieser Stack ist das Zielprodukt.
 

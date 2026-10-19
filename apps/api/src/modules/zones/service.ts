@@ -25,9 +25,51 @@ import {
   clearOverlayRecord,
   setOverlay,
 } from "./overlay-store.js";
+import {
+  attachHeatupHints,
+  observeAllZonesHeatup,
+} from "../heatup/observe-all.js";
 
 /** Mutable fixture state for unpaired UI / open-window smoke. */
 const MOCK_ZONE_STATE = new Map<string, Partial<Zone>>();
+
+/**
+ * Mock-only: nudge currentTemp toward target while heating so heat-up
+ * sessions can complete without a live bridge (testable under Compose).
+ */
+function advanceMockHeatRamp(zones: Zone[]): Zone[] {
+  if (!config.heatupEnabled || config.heatupMockRampCPerPoll <= 0) {
+    return zones;
+  }
+  const step = config.heatupMockRampCPerPoll;
+  return zones.map((z) => {
+    const current = z.currentTempC;
+    const target = z.targetTempC;
+    if (
+      current == null ||
+      target == null ||
+      target <= current + 0.15 ||
+      z.windowOpen ||
+      z.openWindowAutoOffActive ||
+      (z.heatingPowerPercent != null && z.heatingPowerPercent <= 0)
+    ) {
+      return z;
+    }
+    const heating =
+      z.heatingPowerPercent == null || z.heatingPowerPercent > 0;
+    if (!heating && !z.overlayActive) {
+      return z;
+    }
+    const next = Math.min(target, Number((current + step).toFixed(2)));
+    const prev = MOCK_ZONE_STATE.get(z.id) ?? {};
+    MOCK_ZONE_STATE.set(z.id, {
+      ...prev,
+      currentTempC: next,
+      heatingPowerPercent: prev.heatingPowerPercent ?? z.heatingPowerPercent ?? 40,
+    });
+    return { ...z, currentTempC: next };
+  });
+}
 
 /** Rich fixtures for UI parity without a live bridge. */
 function buildMockZones(): Zone[] {
@@ -226,14 +268,20 @@ async function finishZones(
   naming: ZonesResponse["naming"],
   presence: ZonesResponse["presence"],
 ): Promise<ZonesResponse> {
-  const withOverlay = zones.map((z) => applyOverlayHints(z));
-  const withWindow = await enrichZonesWithWindowState(withOverlay);
+  let working = zones.map((z) => applyOverlayHints(z));
+  if (source === "mock") {
+    working = advanceMockHeatRamp(working);
+  }
+  const withWindow = await enrichZonesWithWindowState(working);
   const afterAuto = await processOpenWindowAutoOff(withWindow, {
     setZonePower,
     setZoneTemperature,
     clearZoneOverlay,
   });
-  return { zones: afterAuto, source, naming, presence };
+  // Capture heat-up samples from live (or mock-ramped) snapshots.
+  await observeAllZonesHeatup(afterAuto);
+  const withHints = await attachHeatupHints(afterAuto);
+  return { zones: withHints, source, naming, presence };
 }
 
 export async function listZones(): Promise<ZonesResponse> {

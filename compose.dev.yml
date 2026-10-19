@@ -20,6 +20,15 @@ services:
       TADO_BRIDGE_IP: ${TADO_BRIDGE_IP:-}
       TADO_BRIDGE_PIN: ${TADO_BRIDGE_PIN:-}
       TADO_BRIDGE_PORT: ${TADO_BRIDGE_PORT:-80}
+      # Heat-up: Bright Sky live; seed fixtures so UI tip works immediately.
+      HEATUP_ENABLED: ${HEATUP_ENABLED:-true}
+      OUTDOOR_PROVIDER: ${OUTDOOR_PROVIDER:-brightsky}
+      OUTDOOR_FALLBACK: ${OUTDOOR_FALLBACK:-openmeteo}
+      OUTDOOR_LAT: ${OUTDOOR_LAT:-51.6167}
+      OUTDOOR_LON: ${OUTDOOR_LON:-7.5281}
+      HEATUP_SEED_ON_BOOT: ${HEATUP_SEED_ON_BOOT:-true}
+      HEATUP_MIN_DURATION_MINUTES: ${HEATUP_MIN_DURATION_MINUTES:-1}
+      HEATUP_MOCK_RAMP_C_PER_POLL: ${HEATUP_MOCK_RAMP_C_PER_POLL:-0.2}
     ports:
       - "3080:3080"
     # Uncomment only on Linux Docker Engine (not Docker Desktop) if LAN access fails:

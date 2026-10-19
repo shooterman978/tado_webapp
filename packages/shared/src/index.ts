@@ -72,6 +72,11 @@ export interface Zone {
   devices?: ZoneDevice[];
   /** Where the friendly name came from. */
   nameSource?: ZoneNameSource;
+  /**
+   * Heat-up learning tip for room detail („Start empfohlen um …“).
+   * Null when not enough ok samples yet.
+   */
+  heatupHint?: HeatupZoneHint | null;
 }
 
 /** Persisted open-window preferences (local, no paywall). */
@@ -576,6 +581,16 @@ export type HeatupPredictMethod =
   | "manual"
   | "bucket"
   | "none";
+
+/** Compact heat-up tip embedded on a zone tile / detail payload. */
+export interface HeatupZoneHint {
+  recommendedStartAt: string | null;
+  estimatedMinutes: number | null;
+  outdoorTempC: number | null;
+  method: HeatupPredictMethod;
+  message: string;
+  sampleCount: number;
+}
 
 /** Recommended preheat timing for a target (e.g. Bad 07:00 → 22°C). */
 export interface HeatupPrediction {

@@ -83,6 +83,22 @@ export const config = {
   heatupManualPreheatMinutes: envNumber("HEATUP_MANUAL_PREHEAT_MINUTES", 30),
   heatupMinSamplesForUi: envNumber("HEATUP_MIN_SAMPLES_UI", 3),
   heatupMinSamplesForModel3: envNumber("HEATUP_MIN_SAMPLES_MODEL3", 7),
+  /** Master switch for heat-up capture + hints. */
+  heatupEnabled: env("HEATUP_ENABLED", "true") === "true",
+  /** Outdoor cache TTL (ms). Default 10 minutes. */
+  outdoorTtlMs: envNumber("OUTDOOR_TTL_MS", 600_000),
+  /**
+   * Seed fixture samples for zone-bath on boot when no ok samples exist.
+   * Useful for UI smoke without waiting for real heat-ups.
+   */
+  heatupSeedOnBoot: env("HEATUP_SEED_ON_BOOT", "false") === "true",
+  /**
+   * Mock-only: raise currentTempC toward target by this many °C each zone poll
+   * so heat-up sessions can complete without a live bridge.
+   */
+  heatupMockRampCPerPoll: envNumber("HEATUP_MOCK_RAMP_C_PER_POLL", 0.35),
+  /** Min session duration (minutes) before ok sample allowed. */
+  heatupMinDurationMinutes: envNumber("HEATUP_MIN_DURATION_MINUTES", 2),
   /**
    * Extension points:
    * - DATABASE_URL → learning samples, sync audit (later)

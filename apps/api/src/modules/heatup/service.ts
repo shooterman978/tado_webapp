@@ -14,6 +14,7 @@ import type {
 } from "@heizplan/shared";
 import { config } from "../../config.js";
 import { observeZoneHeatup, type ObserveResult } from "./capture.js";
+// ObserveResult re-exported via observeRoom return type
 import { HEATUP_DEFAULTS } from "./defaults.js";
 import { buildFixtureSamples } from "./fixtures.js";
 import { getRoomModel, saveRoomModel } from "./model-store.js";
@@ -211,6 +212,27 @@ export async function seedFixtures(roomId = "zone-bath"): Promise<{
   await saveRoomModel(dataDir(), state);
   return { roomId, sampleCount: fixtures.length };
 }
+
+/**
+ * Optional boot seed: if HEATUP_SEED_ON_BOOT and no ok samples for zone-bath,
+ * load fixtures so room-detail shows a tip immediately.
+ */
+export async function maybeSeedOnBoot(): Promise<void> {
+  if (!config.heatupEnabled || !config.heatupSeedOnBoot) {
+    return;
+  }
+  const roomId = "zone-bath";
+  const samples = await listSamplesForRoom(dataDir(), roomId);
+  const ok = samples.filter((s) => s.quality === "ok");
+  if (ok.length >= config.heatupMinSamplesForUi) {
+    return;
+  }
+  const result = await seedFixtures(roomId);
+  console.info(
+    `[heatup] seeded ${result.sampleCount} fixture samples for ${roomId}`,
+  );
+}
+
 
 /** Test helper. */
 export function resetHeatupCaches(): void {
