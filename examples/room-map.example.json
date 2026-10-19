@@ -1,0 +1,10 @@
+{
+  "_comment": "Copy to the bridge volume as room-map.json (serial → room name). Prefer one-time cloud sync instead: POST /api/cloud/auth/start. Keys are Tado serials from HAP names (e.g. VA2820875264).",
+  "VA0000000000": "Wohn- & Esszimmer",
+  "RU0000000000": "Wohn- & Esszimmer",
+  "VA1111111111": "Büro",
+  "VA2222222222": "Kinderzimmer",
+  "VA3333333333": "Badezimmer",
+  "VA4444444444": "Küche",
+  "VA5555555555": "Schlafzimmer"
+}

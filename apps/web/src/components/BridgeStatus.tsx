@@ -1,5 +1,5 @@
 /**
- * Bridge / API connection strip for the room overview.
+ * Compact bridge / API connection chip for the room overview.
  * @package @heizplan/web
  */
 
@@ -46,31 +46,13 @@ function classify(
   return "unpaired";
 }
 
-const LABELS: Record<ConnectionKind, { title: string; hint: string }> = {
-  live: {
-    title: "Verbunden",
-    hint: "Live-Zonen von der HomeKit-Bridge",
-  },
-  offline: {
-    title: "Offline",
-    hint: "API nicht erreichbar — Netzwerk prüfen",
-  },
-  unpaired: {
-    title: "Pairing nötig",
-    hint: "TADO_BRIDGE_IP + PIN in .env, dann /api/bridge/pair",
-  },
-  error: {
-    title: "Bridge-Fehler",
-    hint: "LAN und Pairing-Volume prüfen",
-  },
-  mock: {
-    title: "Mock-Daten",
-    hint: "Bridge ungepaart — Demo-Räume",
-  },
-  loading: {
-    title: "Lädt …",
-    hint: "Verbindung zur API",
-  },
+const LABELS: Record<ConnectionKind, string> = {
+  live: "Bridge verbunden",
+  offline: "Offline",
+  unpaired: "Pairing nötig",
+  error: "Bridge-Fehler",
+  mock: "Mock-Daten",
+  loading: "Lädt …",
 };
 
 function formatClock(d: Date | null): string {
@@ -93,10 +75,13 @@ export function BridgeStatus({
   onRefresh,
 }: BridgeStatusProps) {
   const kind = classify(health, zones, offline);
-  const copy = LABELS[kind];
-  const detail = offline
-    ? copy.hint
-    : (health?.bridge.message ?? copy.hint);
+  const title = LABELS[kind];
+  const namingHint =
+    zones?.naming?.source === "cloud"
+      ? " · Raumnamen Cloud"
+      : zones?.naming?.source === "map"
+        ? " · Raumnamen Map"
+        : "";
 
   return (
     <section
@@ -106,10 +91,10 @@ export function BridgeStatus({
     >
       <div className="bridge-status__main">
         <span className="bridge-status__dot" aria-hidden="true" />
-        <div>
-          <p className="bridge-status__title">{copy.title}</p>
-          <p className="bridge-status__hint">{detail}</p>
-        </div>
+        <p className="bridge-status__title">
+          {title}
+          {kind === "live" ? namingHint : ""}
+        </p>
       </div>
       <div className="bridge-status__meta">
         <span className="bridge-status__clock">

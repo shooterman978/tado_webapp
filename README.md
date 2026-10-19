@@ -123,11 +123,15 @@ Vor erstem HAP-Pairing:
 | Methode | Pfad | Zweck |
 |---|---|---|
 | GET | `/api/health` | Liveness + Bridge-Status |
-| GET | `/api/zones` | Raumliste (Mock wenn unpaired, sonst Live) |
-| POST | `/api/zones/:id/temperature` | Solltemperatur setzen `{ "tempC": 20.5 }` |
+| GET | `/api/zones` | Raumkacheln (aggregiert; Mock wenn unpaired) |
+| POST | `/api/zones/:id/temperature` | Solltemperatur setzen `{ "tempC": 20.5 }` (alle Geräte im Raum) |
 | GET | `/api/bridge/status` | Pairing-State |
 | POST | `/api/bridge/prepare-pairing` | Pairing-Vorbereitung (Instruktionen) |
 | POST | `/api/bridge/pair` | HAP-Pairing (PIN aus Env oder Body — nie geloggt) |
+| GET | `/api/cloud/status` | Cloud-Metadaten-Link (nur Raumnamen) |
+| POST | `/api/cloud/auth/start` | Device-Code-Login starten |
+| POST | `/api/cloud/auth/poll` | Login abschließen / pollen |
+| POST | `/api/cloud/sync` | Zone-Namen erneut von der Cloud holen |
 
 ---
 
@@ -139,6 +143,7 @@ Vor erstem HAP-Pairing:
 - PWA/API im LAN oder hinter VPN; HTTPS später per Proxy
 - HomeKit-PIN und Pairing-Store nur serverseitig / Volume
 - Ein HomeKit-Controller: unsere Bridge-Schicht allein
+- Cloud-Tokens (`cloud-tokens.json`) nur im Volume — nie committen/loggen
 
 ---
 
@@ -147,10 +152,9 @@ Vor erstem HAP-Pairing:
 - Kalenderregeln (CalDAV) → `CalendarRuleHook` in `@heizplan/shared`
 - Heat-up-Learning → `HeatupLearningHook`
 - HA-Sync (REST/WS, kein zweiter HomeKit-Slot)
-- Freundliche Raumnamen (aktuell HAP-Gerätenamen)
 
 ---
 
 ## Produktname
 
-Arbeitsname **Heizplan** — eigenes Design (Schiefer + Ember), keine TadoLocal-UI.
+Arbeitsname **Heizplan** — helles Raumkachel-UI (Tado-ähnliche Hierarchy, eigenes Design), keine TadoLocal-UI / keine Markenlogos.

@@ -8,6 +8,7 @@ import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { logger } from "hono/logger";
 import { bridgeRoutes } from "./routes/bridge.js";
+import { cloudRoutes } from "./routes/cloud.js";
 import { healthRoutes } from "./routes/health.js";
 import { zonesRoutes } from "./routes/zones.js";
 
@@ -27,12 +28,18 @@ export function createApp(): Hono {
   app.route("/api/health", healthRoutes);
   app.route("/api/zones", zonesRoutes);
   app.route("/api/bridge", bridgeRoutes);
+  app.route("/api/cloud", cloudRoutes);
 
   app.get("/", (c) =>
     c.json({
       name: "heizplan-api",
       docs: "See repository README",
-      endpoints: ["/api/health", "/api/zones", "/api/bridge/status"],
+      endpoints: [
+        "/api/health",
+        "/api/zones",
+        "/api/bridge/status",
+        "/api/cloud/status",
+      ],
     }),
   );
 

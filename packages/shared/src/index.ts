@@ -3,7 +3,10 @@
  * @package @heizplan/shared
  */
 
-/** Heating zone as seen by the PWA / API (mapped from bridge). */
+/** How a zone display name was resolved. */
+export type ZoneNameSource = "cloud" | "map" | "hap" | "mock";
+
+/** Heating zone / room as seen by the PWA / API. */
 export interface Zone {
   id: string;
   name: string;
@@ -17,6 +20,12 @@ export interface Zone {
   heatingPowerPercent: number | null;
   /** ISO timestamp of last bridge update. */
   updatedAt: string | null;
+  /** HAP accessory aids controlled by this room tile (aggregated). */
+  deviceIds?: string[];
+  /** Number of thermostats folded into this room. */
+  deviceCount?: number;
+  /** Where the friendly name came from. */
+  nameSource?: ZoneNameSource;
 }
 
 export interface HealthStatus {
@@ -40,9 +49,47 @@ export interface BridgeStatusSummary {
   message: string;
 }
 
+/** Naming metadata status for the room overview. */
+export interface ZoneNamingInfo {
+  /** Dominant / best naming source currently applied. */
+  source: ZoneNameSource | "none";
+  /** Last successful cloud metadata sync, if any. */
+  syncedAt: string | null;
+  /** Whether a Tado cloud refresh token is stored locally. */
+  cloudLinked: boolean;
+  /** Devices that still fall back to HAP serial labels. */
+  unresolvedDeviceCount: number;
+}
+
 export interface ZonesResponse {
   zones: Zone[];
   source: "mock" | "bridge" | "empty";
+  naming?: ZoneNamingInfo;
+}
+
+/** Cloud OAuth / metadata link status (names only — not live control). */
+export interface CloudStatus {
+  linked: boolean;
+  homeId: number | null;
+  homeName: string | null;
+  syncedAt: string | null;
+  deviceCount: number;
+  zoneCount: number;
+  message: string;
+}
+
+export interface CloudAuthStart {
+  userCode: string;
+  verificationUri: string;
+  verificationUriComplete: string;
+  expiresIn: number;
+  interval: number;
+}
+
+export interface CloudAuthPollResult {
+  status: "pending" | "linked" | "expired" | "error";
+  message: string;
+  cloud?: CloudStatus;
 }
 
 /** Extension hooks (Phase 1+) — typed placeholders only. */

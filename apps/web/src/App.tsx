@@ -1,5 +1,5 @@
 /**
- * Heizplan PWA shell — live room overview when the bridge is paired.
+ * Heizplan PWA — room tiles with Tado-like hierarchy (local bridge + name sync).
  * @package @heizplan/web
  */
 
@@ -7,7 +7,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { HealthStatus, ZonesResponse } from "@heizplan/shared";
 import { fetchHealth, fetchZones } from "./api";
 import { BridgeStatus } from "./components/BridgeStatus";
-import { ZoneList } from "./components/ZoneList";
+import { RoomGrid } from "./components/RoomGrid";
 
 /** Poll cadence while the tab is visible (live bridge or unpaired). */
 const POLL_MS = 15_000;
@@ -72,6 +72,12 @@ export function App() {
     zones?.source === "bridge" && health?.bridge.paired && !offline,
   );
 
+  const needsNames =
+    live &&
+    zones?.naming &&
+    (zones.naming.source === "hap" || zones.naming.source === "none") &&
+    zones.naming.unresolvedDeviceCount > 0;
+
   function patchTarget(zoneId: string, tempC: number | null): void {
     setZones((prev) => {
       if (!prev) {
@@ -105,9 +111,10 @@ export function App() {
         </div>
       </header>
 
-      <p className="hero-line">Räume</p>
+      <p className="hero-line">Dein Zuhause</p>
       <p className="hero-sub">
-        Ist und Soll direkt von der eigenen Bridge — ohne Cloud-Quota im Alltag.
+        Räume steuern — Ist und Soll von der eigenen Bridge, Raumnamen einmalig
+        aus der Tado-Cloud.
       </p>
 
       <BridgeStatus
@@ -134,8 +141,18 @@ export function App() {
         </div>
       ) : null}
 
+      {needsNames ? (
+        <div className="callout callout--names" role="status">
+          <strong>Raumnamen fehlen noch.</strong> Einmalig Cloud-Metadaten
+          verknüpfen (
+          <code>POST /api/cloud/auth/start</code>, Browser-Login, dann{" "}
+          <code>POST /api/cloud/auth/poll</code>) — oder{" "}
+          <code>room-map.json</code> im Bridge-Volume. Steuerung bleibt lokal.
+        </div>
+      ) : null}
+
       {!offline ? (
-        <ZoneList
+        <RoomGrid
           zones={zones?.zones ?? []}
           interactive={live}
           onOptimisticTarget={(id, temp) => patchTarget(id, temp)}
@@ -146,10 +163,10 @@ export function App() {
 
       <footer className="footer-note">
         {live
-          ? "Live über HomeKit. Tippe ±0,5 °C — Änderungen gehen sofort an die Bridge."
+          ? "Live über HomeKit. Tippe ± auf einer Raumkachel — Soll geht an alle Thermostate im Raum."
           : offline
             ? "Keine Verbindung zur API."
-            : "Mock oder ungepaart — nach Pairing erscheinen Live-Zonen und Soll-Steuerung."}
+            : "Mock oder ungepaart — nach Pairing erscheinen Live-Räume und Soll-Steuerung."}
       </footer>
     </div>
   );
