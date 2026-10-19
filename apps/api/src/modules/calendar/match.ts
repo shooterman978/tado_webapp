@@ -1,15 +1,32 @@
 /**
  * Pure calendar rule matching (no I/O).
  *
+ * Timing semantics (heat):
+ * - during: entire event [start, end)
+ * - before: heat so setpoint is reached at start − readyMinutesBefore
+ *           (active from readyAt − preheat until event start)
+ * - after:  heat so setpoint is reached at end + readyMinutesAfter
+ *           (active from readyAt − preheat until readyAt + hold)
+ *
+ * Off uses the same ready-by anchors but no preheat (instant power off).
+ *
  * @package @heizplan/api
  */
 
 import type { CalendarRule, CalendarRuleTiming } from "@heizplan/shared";
 import type { CalDavEvent } from "./caldav.js";
+import { defaultPreheatMinutes } from "./heatup.js";
 
-/** Grace after start / around end for at_start / at_end (ms). */
-const START_WINDOW_MS = 30 * 60_000;
-const END_WINDOW_MS = 45 * 60_000;
+/** Keep heat after “ready” for after-timing (ms). */
+const AFTER_HOLD_MS = 2 * 60 * 60_000;
+
+export interface TimingWindowOptions {
+  readyMinutesBefore?: number;
+  readyMinutesAfter?: number;
+  /** Preheat lead for heat mode; ignored for off. */
+  preheatMinutes?: number;
+  mode?: "heat" | "off";
+}
 
 export function eventMatchesRule(event: CalDavEvent, rule: CalendarRule): boolean {
   if (!rule.enabled) {
@@ -53,37 +70,71 @@ export function isEventActiveAt(event: CalDavEvent, at: Date): boolean {
 }
 
 /**
- * Whether the event is in the timing window for this rule.
- * - during: entire event
- * - at_start: from start for ~30 min (or until end if shorter)
- * - at_end: from end−ε through ~45 min after end
+ * Absolute ready-by / apply window for a timing mode.
+ * Returns null if event times are invalid.
+ */
+export function timingWindowBounds(
+  event: CalDavEvent,
+  timing: CalendarRuleTiming,
+  opts: TimingWindowOptions = {},
+): { windowStart: number; windowEnd: number; readyAt: number } | null {
+  const start = Date.parse(event.startsAt);
+  const end = Date.parse(event.endsAt);
+  if (!Number.isFinite(start) || !Number.isFinite(end)) {
+    return null;
+  }
+  const readyBefore = Math.max(0, opts.readyMinutesBefore ?? 60);
+  const readyAfter = Math.max(0, opts.readyMinutesAfter ?? 60);
+  const mode = opts.mode ?? "heat";
+  const preheat =
+    mode === "heat"
+      ? Math.max(15, opts.preheatMinutes ?? defaultPreheatMinutes())
+      : 0;
+
+  switch (timing) {
+    case "before": {
+      const readyAt = start - readyBefore * 60_000;
+      return {
+        readyAt,
+        windowStart: readyAt - preheat * 60_000,
+        windowEnd: start,
+      };
+    }
+    case "after": {
+      const readyAt = end + readyAfter * 60_000;
+      return {
+        readyAt,
+        windowStart: readyAt - preheat * 60_000,
+        windowEnd: readyAt + AFTER_HOLD_MS,
+      };
+    }
+    case "during":
+    default:
+      return {
+        readyAt: start,
+        windowStart: start,
+        windowEnd: end,
+      };
+  }
+}
+
+/**
+ * Whether `at` falls in the apply window for this timing.
  */
 export function isEventInTimingWindow(
   event: CalDavEvent,
   timing: CalendarRuleTiming,
   at = new Date(),
+  opts: TimingWindowOptions = {},
 ): boolean {
-  const t = at.getTime();
-  const start = Date.parse(event.startsAt);
-  const end = Date.parse(event.endsAt);
-  if (!Number.isFinite(start) || !Number.isFinite(end)) {
+  const bounds = timingWindowBounds(event, timing, opts);
+  if (!bounds) {
     return false;
   }
-  switch (timing) {
-    case "at_start":
-      return t >= start && t < Math.min(end, start + START_WINDOW_MS);
-    case "at_end":
-      return t >= end - 60_000 && t < end + END_WINDOW_MS;
-    case "during":
-    default:
-      return start <= t && t < end;
-  }
+  const t = at.getTime();
+  return t >= bounds.windowStart && t < bounds.windowEnd;
 }
 
-/**
- * When Jonas marked events in the picker, optionally narrow the candidate set.
- * Empty selection → all fetched events (pattern + UID rules).
- */
 export function filterEventsBySelection(
   events: CalDavEvent[],
   selectedUids: string[],
@@ -102,8 +153,11 @@ export interface RuleRoomAction {
   event: CalDavEvent;
   mode: RoomActionMode;
   targetTempC: number | null;
-  /** Per-group timing (heat vs off). */
   timing: CalendarRuleTiming;
+  /** Ready-by instant (ISO) for heat before/after; null for during/off. */
+  readyAt: string | null;
+  /** Preheat minutes used for this heat action. */
+  preheatMinutes: number;
 }
 
 /**
@@ -115,6 +169,7 @@ export function selectActiveMatches(
   rules: CalendarRule[],
   at = new Date(),
   _selectedUids: string[] = [],
+  preheatByRoom: Map<string, number> = new Map(),
 ): Map<string, RuleRoomAction> {
   const enabled = rules
     .filter((r) => r.enabled)
@@ -124,6 +179,8 @@ export function selectActiveMatches(
   for (const rule of enabled) {
     const heatTiming = rule.timing ?? "during";
     const offTiming = rule.offTiming ?? rule.timing ?? "during";
+    const readyBefore = rule.readyMinutesBefore ?? 60;
+    const readyAfter = rule.readyMinutesAfter ?? 60;
 
     for (const event of events) {
       if (!eventMatchesRule(event, rule)) {
@@ -143,37 +200,68 @@ export function selectActiveMatches(
             ? rule.roomIds
             : [];
 
-      if (isEventInTimingWindow(event, heatTiming, at)) {
-        for (const roomId of heatRooms) {
-          if (byRoom.has(roomId)) {
-            continue;
-          }
-          byRoom.set(roomId, {
-            rule,
-            event,
-            mode: "heat",
-            targetTempC:
-              rule.mode === "eco"
-                ? (rule.targetTempC ?? 16)
-                : rule.targetTempC,
-            timing: heatTiming,
-          });
+      for (const roomId of heatRooms) {
+        if (byRoom.has(roomId)) {
+          continue;
         }
+        const preheat =
+          preheatByRoom.get(roomId) ?? defaultPreheatMinutes();
+        if (
+          !isEventInTimingWindow(event, heatTiming, at, {
+            readyMinutesBefore: readyBefore,
+            readyMinutesAfter: readyAfter,
+            preheatMinutes: preheat,
+            mode: "heat",
+          })
+        ) {
+          continue;
+        }
+        const bounds = timingWindowBounds(event, heatTiming, {
+          readyMinutesBefore: readyBefore,
+          readyMinutesAfter: readyAfter,
+          preheatMinutes: preheat,
+          mode: "heat",
+        });
+        byRoom.set(roomId, {
+          rule,
+          event,
+          mode: "heat",
+          targetTempC:
+            rule.mode === "eco"
+              ? (rule.targetTempC ?? 16)
+              : rule.targetTempC,
+          timing: heatTiming,
+          readyAt:
+            heatTiming === "during" || !bounds
+              ? null
+              : new Date(bounds.readyAt).toISOString(),
+          preheatMinutes: preheat,
+        });
       }
 
-      if (isEventInTimingWindow(event, offTiming, at)) {
-        for (const roomId of offRooms) {
-          if (byRoom.has(roomId)) {
-            continue;
-          }
-          byRoom.set(roomId, {
-            rule,
-            event,
-            mode: "off",
-            targetTempC: null,
-            timing: offTiming,
-          });
+      for (const roomId of offRooms) {
+        if (byRoom.has(roomId)) {
+          continue;
         }
+        if (
+          !isEventInTimingWindow(event, offTiming, at, {
+            readyMinutesBefore: readyBefore,
+            readyMinutesAfter: readyAfter,
+            preheatMinutes: 0,
+            mode: "off",
+          })
+        ) {
+          continue;
+        }
+        byRoom.set(roomId, {
+          rule,
+          event,
+          mode: "off",
+          targetTempC: null,
+          timing: offTiming,
+          readyAt: null,
+          preheatMinutes: 0,
+        });
       }
     }
   }

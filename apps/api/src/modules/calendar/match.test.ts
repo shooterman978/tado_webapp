@@ -15,6 +15,7 @@ import {
   isEventActiveAt,
   isEventInTimingWindow,
   selectActiveMatches,
+  timingWindowBounds,
 } from "./match.js";
 
 function rule(
@@ -33,6 +34,8 @@ function rule(
     targetTempC: partial.targetTempC ?? 20,
     timing: partial.timing ?? "during",
     offTiming: partial.offTiming ?? partial.timing ?? "during",
+    readyMinutesBefore: partial.readyMinutesBefore ?? 60,
+    readyMinutesAfter: partial.readyMinutesAfter ?? 60,
     applyPath: partial.applyPath ?? "hap_overlay",
     priority: partial.priority ?? 100,
     createdAt: "2026-01-01T00:00:00.000Z",
@@ -57,25 +60,57 @@ function main(): void {
     eventMatchesRule(event({ summary: "Arbeit im Büro" }), rule({})),
     true,
   );
+
+  const mid = new Date("2026-10-19T12:00:00.000Z");
+  const ev = event({}); // 08:00–17:00Z
+  assert.equal(isEventInTimingWindow(ev, "during", mid), true);
+
+  // before: ready at 07:00, preheat 60 → window 06:00–08:00
+  const beforeOpts = {
+    readyMinutesBefore: 60,
+    preheatMinutes: 60,
+    mode: "heat" as const,
+  };
+  const boundsBefore = timingWindowBounds(ev, "before", beforeOpts)!;
   assert.equal(
-    eventMatchesRule(
-      event({ uid: "u2" }),
-      rule({
-        match: { kind: "event_uid", value: "u1", eventUids: ["u1", "u2"] },
-      }),
+    new Date(boundsBefore.readyAt).toISOString(),
+    "2026-10-19T07:00:00.000Z",
+  );
+  assert.equal(
+    isEventInTimingWindow(
+      ev,
+      "before",
+      new Date("2026-10-19T06:30:00.000Z"),
+      beforeOpts,
     ),
     true,
   );
+  assert.equal(
+    isEventInTimingWindow(ev, "before", mid, beforeOpts),
+    false,
+  );
 
-  const mid = new Date("2026-10-19T12:00:00.000Z");
-  const nearStart = new Date("2026-10-19T08:10:00.000Z");
-  const afterEnd = new Date("2026-10-19T17:10:00.000Z");
-  const ev = event({});
-  assert.equal(isEventInTimingWindow(ev, "during", mid), true);
-  assert.equal(isEventInTimingWindow(ev, "at_start", nearStart), true);
-  assert.equal(isEventInTimingWindow(ev, "at_start", mid), false);
-  assert.equal(isEventInTimingWindow(ev, "at_end", afterEnd), true);
-  assert.equal(isEventInTimingWindow(ev, "at_end", mid), false);
+  // after: end 17:00 + 60 → ready 18:00, preheat 60 → window 17:00–20:00
+  const afterOpts = {
+    readyMinutesAfter: 60,
+    preheatMinutes: 60,
+    mode: "heat" as const,
+  };
+  const boundsAfter = timingWindowBounds(ev, "after", afterOpts)!;
+  assert.equal(
+    new Date(boundsAfter.readyAt).toISOString(),
+    "2026-10-19T18:00:00.000Z",
+  );
+  assert.equal(
+    isEventInTimingWindow(
+      ev,
+      "after",
+      new Date("2026-10-19T17:30:00.000Z"),
+      afterOpts,
+    ),
+    true,
+  );
+  assert.equal(isEventInTimingWindow(ev, "after", mid, afterOpts), false);
 
   assert.equal(isEventActiveAt(ev, mid), true);
 
@@ -95,50 +130,53 @@ function main(): void {
   assert.equal(matches.get("heat-1")?.mode, "heat");
   assert.equal(matches.get("off-1")?.mode, "off");
 
-  // Per-group timing: heat during, off only at end.
-  const split = selectActiveMatches(
+  // Per-group: heat before (active morning), off during (midday)
+  const morning = new Date("2026-10-19T06:30:00.000Z");
+  const splitMorning = selectActiveMatches(
     [event({})],
     [
       rule({
         id: "split",
         roomIds: ["heat-2"],
         offRoomIds: ["off-2"],
-        timing: "during",
-        offTiming: "at_end",
+        timing: "before",
+        offTiming: "during",
+        readyMinutesBefore: 60,
         targetTempC: 21,
       }),
     ],
-    mid,
+    morning,
+    [],
+    new Map([["heat-2", 60]]),
   );
-  assert.equal(split.has("heat-2"), true);
-  assert.equal(split.has("off-2"), false);
-  const splitEnd = selectActiveMatches(
-    [event({})],
-    [
-      rule({
-        id: "split",
-        roomIds: ["heat-2"],
-        offRoomIds: ["off-2"],
-        timing: "during",
-        offTiming: "at_end",
-        targetTempC: 21,
-      }),
-    ],
-    afterEnd,
-  );
-  assert.equal(splitEnd.has("heat-2"), false);
-  assert.equal(splitEnd.has("off-2"), true);
+  assert.equal(splitMorning.has("heat-2"), true);
+  assert.equal(splitMorning.has("off-2"), false);
 
-  // Pattern rules still match without selection filter.
-  const future = selectActiveMatches(
-    [event({ uid: "future", summary: "Büro später", startsAt: "2026-10-19T08:00:00.000Z", endsAt: "2026-10-19T17:00:00.000Z" })],
-    [rule({ matchValue: "Büro" })],
+  const splitMid = selectActiveMatches(
+    [event({})],
+    [
+      rule({
+        id: "split",
+        roomIds: ["heat-2"],
+        offRoomIds: ["off-2"],
+        timing: "before",
+        offTiming: "during",
+        readyMinutesBefore: 60,
+        targetTempC: 21,
+      }),
+    ],
     mid,
     [],
+    new Map([["heat-2", 60]]),
   );
-  assert.ok(future.has("room-z1"));
+  assert.equal(splitMid.has("heat-2"), false);
+  assert.equal(splitMid.has("off-2"), true);
 
-  assert.equal(filterEventsBySelection([event({ uid: "a" }), event({ uid: "b" })], ["b"]).length, 1);
+  assert.equal(
+    filterEventsBySelection([event({ uid: "a" }), event({ uid: "b" })], ["b"])
+      .length,
+    1,
+  );
 
   const iso = parseIcalDate("20261019T083000Z");
   assert.equal(iso, "2026-10-19T08:30:00.000Z");

@@ -167,10 +167,24 @@ function normaliseApplyPath(pathValue: unknown): CalendarApplyPath {
 }
 
 function normaliseTiming(value: unknown): CalendarRuleTiming {
-  if (value === "at_start" || value === "at_end") {
-    return value;
+  // Legacy aliases from wizard v2 (“ab Start / ab Ende”).
+  if (value === "before" || value === "at_start") {
+    return "before";
+  }
+  if (value === "after" || value === "at_end") {
+    return "after";
   }
   return "during";
+}
+
+function normaliseReadyMinutes(
+  value: unknown,
+  fallback: number,
+): number {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return Math.min(240, Math.max(0, Math.trunc(value)));
+  }
+  return fallback;
 }
 
 export function normaliseRule(
@@ -285,6 +299,18 @@ export function normaliseRule(
           : input.timing !== undefined
             ? input.timing
             : existing?.timing,
+    ),
+    readyMinutesBefore: normaliseReadyMinutes(
+      input.readyMinutesBefore !== undefined
+        ? input.readyMinutesBefore
+        : existing?.readyMinutesBefore,
+      60,
+    ),
+    readyMinutesAfter: normaliseReadyMinutes(
+      input.readyMinutesAfter !== undefined
+        ? input.readyMinutesAfter
+        : existing?.readyMinutesAfter,
+      60,
     ),
     applyPath: normaliseApplyPath(input.applyPath ?? existing?.applyPath),
     priority:

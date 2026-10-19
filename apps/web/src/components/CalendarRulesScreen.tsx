@@ -49,21 +49,47 @@ type HowKind = "events" | "pattern";
 
 const TEMP_PRESETS = [18, 19, 20, 21, 22] as const;
 
-const TIMING_OPTIONS: Array<{ id: CalendarRuleTiming; label: string; hint: string }> = [
+const HEAT_TIMING_OPTIONS: Array<{
+  id: CalendarRuleTiming;
+  label: string;
+  hint: string;
+}> = [
   {
     id: "during",
     label: "Während des ganzen Termins",
     hint: "Die ganze Zeit, solange der Termin läuft",
   },
   {
-    id: "at_start",
-    label: "Wenn der Termin beginnt",
-    hint: "Kurz ab Start (ca. 30 Minuten)",
+    id: "before",
+    label: "Rechtzeitig vor dem Termin warm",
+    hint: "z. B. Büro ab 8:00 → Bad soll schon um 7:00 warm sein. Die Heizung startet früher, damit die Temperatur rechtzeitig da ist.",
   },
   {
-    id: "at_end",
-    label: "Wenn der Termin endet",
-    hint: "Ab dem Ende (ca. 45 Minuten danach)",
+    id: "after",
+    label: "Nach dem Termin wieder warm",
+    hint: "z. B. Bürgerbüro bis 13:00 → Schlafzimmer soll um 14:00 wieder warm sein. Die Heizung startet rechtzeitig vorher.",
+  },
+];
+
+const OFF_TIMING_OPTIONS: Array<{
+  id: CalendarRuleTiming;
+  label: string;
+  hint: string;
+}> = [
+  {
+    id: "during",
+    label: "Während des ganzen Termins",
+    hint: "Aus, solange der Termin läuft (z. B. Büro aus während du weg bist)",
+  },
+  {
+    id: "before",
+    label: "Schon vor dem Termin aus",
+    hint: "Räume vorher ausschalten — z. B. eine Stunde vor Start",
+  },
+  {
+    id: "after",
+    label: "Nach dem Termin aus",
+    hint: "Räume nach dem Ende ausschalten — z. B. eine Stunde danach",
   },
 ];
 
@@ -81,8 +107,12 @@ function formatWhen(iso: string): string {
   }
 }
 
-function timingLabel(t: CalendarRuleTiming | undefined): string {
-  return TIMING_OPTIONS.find((o) => o.id === (t ?? "during"))?.label ?? "während des Termins";
+function timingLabel(
+  t: CalendarRuleTiming | undefined,
+  kind: "heat" | "off" = "heat",
+): string {
+  const list = kind === "off" ? OFF_TIMING_OPTIONS : HEAT_TIMING_OPTIONS;
+  return list.find((o) => o.id === (t ?? "during"))?.label ?? "während des Termins";
 }
 
 function rulePlainSummary(rule: CalendarRule, zones: Zone[]): string {
@@ -95,12 +125,12 @@ function rulePlainSummary(rule: CalendarRule, zones: Zone[]): string {
   const parts: string[] = [];
   if (heat) {
     parts.push(
-      `${heat} auf ${rule.targetTempC != null ? `${rule.targetTempC.toFixed(0)}°` : "—"} (${timingLabel(rule.timing)})`,
+      `${heat} auf ${rule.targetTempC != null ? `${rule.targetTempC.toFixed(0)}°` : "—"} (${timingLabel(rule.timing, "heat")})`,
     );
   }
   if (off) {
     parts.push(
-      `${off} aus (${timingLabel(rule.offTiming ?? rule.timing)})`,
+      `${off} aus (${timingLabel(rule.offTiming ?? rule.timing, "off")})`,
     );
   }
   const when =
@@ -113,13 +143,16 @@ function rulePlainSummary(rule: CalendarRule, zones: Zone[]): string {
 function TimingPicker({
   value,
   onChange,
+  kind,
 }: {
   value: CalendarRuleTiming;
   onChange: (t: CalendarRuleTiming) => void;
+  kind: "heat" | "off";
 }) {
+  const options = kind === "off" ? OFF_TIMING_OPTIONS : HEAT_TIMING_OPTIONS;
   return (
     <div className="cal-wiz__timing">
-      {TIMING_OPTIONS.map((opt) => (
+      {options.map((opt) => (
         <button
           key={opt.id}
           type="button"
@@ -157,6 +190,8 @@ export function CalendarRulesScreen({
   const [tempC, setTempC] = useState(20);
   const [heatTiming, setHeatTiming] = useState<CalendarRuleTiming>("during");
   const [offTiming, setOffTiming] = useState<CalendarRuleTiming>("during");
+  const [readyBefore, setReadyBefore] = useState(60);
+  const [readyAfter, setReadyAfter] = useState(60);
   const [doneMsg, setDoneMsg] = useState<string | null>(null);
   const [connectUser, setConnectUser] = useState("");
   const [connectPass, setConnectPass] = useState("");
@@ -195,6 +230,8 @@ export function CalendarRulesScreen({
     setTempC(20);
     setHeatTiming("during");
     setOffTiming("during");
+    setReadyBefore(60);
+    setReadyAfter(60);
     setDoneMsg(null);
     setError(null);
   }
@@ -342,6 +379,8 @@ export function CalendarRulesScreen({
         targetTempC: heatIds.length > 0 ? tempC : null,
         timing: heatTiming,
         offTiming,
+        readyMinutesBefore: readyBefore,
+        readyMinutesAfter: readyAfter,
         applyPath: "hap_overlay",
         priority: 200,
       });
@@ -854,7 +893,47 @@ export function CalendarRulesScreen({
                 />
               </label>
               <h2 className="cal-wiz__h">Wann heizen?</h2>
-              <TimingPicker value={heatTiming} onChange={setHeatTiming} />
+              <TimingPicker
+                kind="heat"
+                value={heatTiming}
+                onChange={setHeatTiming}
+              />
+              {heatTiming === "before" ? (
+                <label className="cal-wiz__field">
+                  <span>Warm erreicht … Minuten vor Terminbeginn</span>
+                  <input
+                    type="number"
+                    min={0}
+                    max={240}
+                    step={15}
+                    value={readyBefore}
+                    onChange={(e) =>
+                      setReadyBefore(Number(e.target.value) || 60)
+                    }
+                  />
+                </label>
+              ) : null}
+              {heatTiming === "after" ? (
+                <label className="cal-wiz__field">
+                  <span>Warm erreicht … Minuten nach Terminende</span>
+                  <input
+                    type="number"
+                    min={0}
+                    max={240}
+                    step={15}
+                    value={readyAfter}
+                    onChange={(e) =>
+                      setReadyAfter(Number(e.target.value) || 60)
+                    }
+                  />
+                </label>
+              ) : null}
+              {heatTiming === "before" || heatTiming === "after" ? (
+                <p className="cal-wiz__hint">
+                  Die Heizung startet früher (aktuell ca. 60 Min. Vorlauf), damit
+                  die Temperatur pünktlich da ist.
+                </p>
+              ) : null}
             </>
           ) : null}
 
@@ -874,7 +953,41 @@ export function CalendarRulesScreen({
           {offIds.length > 0 ? (
             <>
               <h2 className="cal-wiz__h">Wann ausschalten?</h2>
-              <TimingPicker value={offTiming} onChange={setOffTiming} />
+              <TimingPicker
+                kind="off"
+                value={offTiming}
+                onChange={setOffTiming}
+              />
+              {offTiming === "before" ? (
+                <label className="cal-wiz__field">
+                  <span>Aus … Minuten vor Terminbeginn</span>
+                  <input
+                    type="number"
+                    min={0}
+                    max={240}
+                    step={15}
+                    value={readyBefore}
+                    onChange={(e) =>
+                      setReadyBefore(Number(e.target.value) || 60)
+                    }
+                  />
+                </label>
+              ) : null}
+              {offTiming === "after" ? (
+                <label className="cal-wiz__field">
+                  <span>Aus … Minuten nach Terminende</span>
+                  <input
+                    type="number"
+                    min={0}
+                    max={240}
+                    step={15}
+                    value={readyAfter}
+                    onChange={(e) =>
+                      setReadyAfter(Number(e.target.value) || 60)
+                    }
+                  />
+                </label>
+              ) : null}
             </>
           ) : null}
 
@@ -912,10 +1025,10 @@ export function CalendarRulesScreen({
               ? ` · Titel enthält „${pattern}“`
               : ` · ${pickedUids.length} Termin(e)`}
             {heatIds.length > 0
-              ? ` · Heizen: ${timingLabel(heatTiming)}`
+              ? ` · Heizen: ${timingLabel(heatTiming, "heat")}`
               : ""}
             {offIds.length > 0
-              ? ` · Aus: ${timingLabel(offTiming)}`
+              ? ` · Aus: ${timingLabel(offTiming, "off")}`
               : ""}
           </p>
           <button

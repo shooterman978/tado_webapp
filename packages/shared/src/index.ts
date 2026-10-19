@@ -342,12 +342,17 @@ export type CalendarMatchKind =
 
 /**
  * When relative to the calendar event the rule applies.
- * Plain-language mapping (UI):
- * - during → „während des ganzen Termins“
- * - at_start → „wenn der Termin beginnt“
- * - at_end → „wenn der Termin endet“
+ * Plain-language mapping (UI, heat):
+ * - during → „Während des ganzen Termins“
+ * - before → „Rechtzeitig vor dem Termin warm“ (target reached at start − readyMinutesBefore)
+ * - after  → „Nach dem Termin wieder warm“ (target reached at end + readyMinutesAfter)
+ *
+ * Legacy aliases `at_start` / `at_end` normalise to before / after.
  */
-export type CalendarRuleTiming = "during" | "at_start" | "at_end";
+export type CalendarRuleTiming = "during" | "before" | "after";
+
+/** @deprecated Prefer {@link CalendarRuleTiming} `before` / `after`. */
+export type CalendarRuleTimingLegacy = "at_start" | "at_end";
 
 /** Where the override is applied. */
 export type CalendarApplyPath = "hap_overlay" | "cloud_write";
@@ -393,14 +398,24 @@ export interface CalendarRule {
   targetTempC: number | null;
   /**
    * When heat rooms apply relative to the event (default during).
-   * Plain UI: „Wann?“ under „Räume heizen“.
+   * Plain UI: „Wann heizen?“ under „Räume heizen“.
    */
   timing: CalendarRuleTiming;
   /**
    * When off rooms apply relative to the event (default during).
-   * Plain UI: „Wann?“ under „Räume ausschalten“.
+   * Plain UI: „Wann ausschalten?“ under „Räume ausschalten“.
    */
   offTiming: CalendarRuleTiming;
+  /**
+   * For `before`: minutes before event start when the setpoint should already
+   * be reached (e.g. 60 → Bad warm um 7:00 bei Termin 8:00). Default 60.
+   */
+  readyMinutesBefore: number;
+  /**
+   * For `after`: minutes after event end when the setpoint should be reached
+   * (e.g. 60 → Schlafzimmer warm um 14:00 bei Ende 13:00). Default 60.
+   */
+  readyMinutesAfter: number;
   /**
    * Default hap_overlay (local, quota-free).
    * cloud_write only when remaining > 0 and the engine opts in.

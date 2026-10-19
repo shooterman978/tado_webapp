@@ -9,7 +9,6 @@ import type {
   CalendarActiveOverride,
   CalendarEvaluateResult,
   CalendarRule,
-  CalendarRuleTiming,
 } from "@heizplan/shared";
 import { config } from "../../config.js";
 import { getCloudQuota } from "../cloud/quota.js";
@@ -19,7 +18,12 @@ import {
   setZoneTemperature,
 } from "../zones/service.js";
 import type { CalDavEvent } from "./caldav.js";
-import { selectActiveMatches, type RuleRoomAction } from "./match.js";
+import { estimatePreheatMinutes } from "./heatup.js";
+import {
+  selectActiveMatches,
+  timingWindowBounds,
+  type RuleRoomAction,
+} from "./match.js";
 import {
   loadActiveOverrides,
   saveActiveOverrides,
@@ -39,35 +43,52 @@ function sameOverride(
 }
 
 function overlayDurationMinutes(
-  event: CalDavEvent,
-  timing: CalendarRuleTiming,
+  roomId: string,
+  action: RuleRoomAction,
 ): number {
   const now = Date.now();
-  const start = Date.parse(event.startsAt);
-  const end = Date.parse(event.endsAt);
-  if (timing === "at_end") {
-    return 120;
+  const bounds = timingWindowBounds(action.event, action.timing, {
+    readyMinutesBefore: action.rule.readyMinutesBefore ?? 60,
+    readyMinutesAfter: action.rule.readyMinutesAfter ?? 60,
+    preheatMinutes: action.preheatMinutes,
+    mode: action.mode,
+  });
+  if (!bounds) {
+    return 60;
   }
-  if (timing === "at_start") {
-    const until = Math.min(end, start + 30 * 60_000);
-    return Math.max(1, Math.ceil((until - now) / 60_000));
-  }
-  return Math.max(1, Math.ceil((end - now) / 60_000));
+  return Math.max(1, Math.ceil((bounds.windowEnd - now) / 60_000));
 }
 
 async function applyHap(
   roomId: string,
   action: RuleRoomAction,
 ): Promise<void> {
-  const durationMinutes = overlayDurationMinutes(action.event, action.timing);
-
   if (action.mode === "off") {
     await setZonePower(roomId, "off");
     return;
   }
 
+  const durationMinutes = overlayDurationMinutes(roomId, action);
   const temp = action.targetTempC ?? 20;
   await setZoneTemperature(roomId, temp, { durationMinutes });
+}
+
+async function collectPreheatEstimates(
+  rules: CalendarRule[],
+): Promise<Map<string, number>> {
+  const ids = new Set<string>();
+  for (const rule of rules) {
+    for (const id of rule.roomIds) {
+      ids.add(id);
+    }
+  }
+  const map = new Map<string, number>();
+  await Promise.all(
+    [...ids].map(async (id) => {
+      map.set(id, await estimatePreheatMinutes(id));
+    }),
+  );
+  return map;
 }
 
 /**
@@ -79,7 +100,8 @@ export async function reconcileOverrides(
   rules: CalendarRule[],
   at = new Date(),
 ): Promise<CalendarEvaluateResult> {
-  const desired = selectActiveMatches(events, rules, at);
+  const preheatByRoom = await collectPreheatEstimates(rules);
+  const desired = selectActiveMatches(events, rules, at, [], preheatByRoom);
   const previous = await loadActiveOverrides(dataDir());
   const quota = await getCloudQuota();
 
