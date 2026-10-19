@@ -172,6 +172,9 @@ export function App() {
                 targetTempC: tempC,
                 overlayActive: tempC !== null,
                 onSchedule: false,
+                overlayControl: tempC !== null ? "manual" : "none",
+                calendarRuleName: null,
+                calendarRuleId: null,
                 overlayEndsAt: null,
                 updatedAt: new Date().toISOString(),
               }
@@ -194,6 +197,9 @@ export function App() {
                 ...z,
                 overlayActive: false,
                 onSchedule: z.targetTempC != null,
+                overlayControl: "none",
+                calendarRuleName: null,
+                calendarRuleId: null,
                 overlayEndsAt: null,
                 updatedAt: new Date().toISOString(),
               }

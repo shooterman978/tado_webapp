@@ -25,7 +25,9 @@ import {
   type RuleRoomAction,
 } from "./match.js";
 import {
+  isCalendarDismissed,
   loadActiveOverrides,
+  loadCalendarDismissals,
   saveActiveOverrides,
 } from "./store.js";
 
@@ -103,7 +105,15 @@ export async function reconcileOverrides(
   const preheatByRoom = await collectPreheatEstimates(rules);
   const desired = selectActiveMatches(events, rules, at, [], preheatByRoom);
   const previous = await loadActiveOverrides(dataDir());
+  const dismissals = await loadCalendarDismissals(dataDir());
   const quota = await getCloudQuota();
+
+  // Honour user “Zeitplan fortsetzen” for this room+event until endsAt.
+  for (const [roomId, action] of [...desired.entries()]) {
+    if (isCalendarDismissed(dismissals, roomId, action.event.uid, at)) {
+      desired.delete(roomId);
+    }
+  }
 
   let applied = 0;
   let cleared = 0;
@@ -120,7 +130,8 @@ export async function reconcileOverrides(
     }
     try {
       if (prev.applyPath === "hap_overlay") {
-        await clearZoneOverlay(prev.roomId);
+        // Avoid recursive calendar clear — HAP + local overlay only.
+        await clearZoneOverlay(prev.roomId, { skipCalendarClear: true });
       }
       cleared += 1;
     } catch (err) {

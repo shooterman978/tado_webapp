@@ -30,6 +30,14 @@ export interface ZoneDevice {
   windowOpen?: boolean | null;
 }
 
+/**
+ * What currently drives the room off the Smart Schedule baseline.
+ * - none: follows schedule (or unknown idle)
+ * - manual: user setpoint / PWA overlay
+ * - calendar: active CalendarOverride rule
+ */
+export type ZoneOverlayControl = "none" | "manual" | "calendar";
+
 /** Heating zone / room as seen by the PWA / API. */
 export interface Zone {
   id: string;
@@ -42,6 +50,15 @@ export interface Zone {
   overlayActive: boolean;
   /** ISO timestamp when a timed overlay ends (local tracker or fixture). */
   overlayEndsAt?: string | null;
+  /**
+   * Distinguishes manual vs calendar when {@link overlayActive} (or calendar
+   * hold) is true. UI footer uses this instead of a generic “manual” hand.
+   */
+  overlayControl?: ZoneOverlayControl;
+  /** Active calendar rule display name when overlayControl === "calendar". */
+  calendarRuleName?: string | null;
+  /** Active calendar rule id when overlayControl === "calendar". */
+  calendarRuleId?: string | null;
   /** Heating power hint 0–100, if available. */
   heatingPowerPercent: number | null;
   /** Relative humidity 0–100, if a sensor is present. */

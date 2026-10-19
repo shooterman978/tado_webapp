@@ -23,6 +23,8 @@ const RULES_FILE = "calendar-rules.json";
 const ACTIVE_FILE = "calendar-active.json";
 const META_FILE = "calendar-meta.json";
 const SELECTED_FILE = "calendar-selected-events.json";
+/** User tapped “Zeitplan fortsetzen” while a calendar override was active. */
+const DISMISS_FILE = "calendar-dismissals.json";
 
 export interface CalendarCredentials {
   url: string;
@@ -50,6 +52,18 @@ interface ActiveFile {
 interface SelectedFile {
   selectedUids: string[];
   updatedAt: string;
+}
+
+/** Skip re-applying the same room+event until `until` (ISO). */
+export interface CalendarDismissal {
+  roomId: string;
+  eventUid: string;
+  until: string;
+  dismissedAt: string;
+}
+
+interface DismissalsFile {
+  dismissals: CalendarDismissal[];
 }
 
 async function ensureDir(dataDir: string): Promise<void> {
@@ -384,6 +398,80 @@ export async function saveActiveOverrides(
     overrides,
   } satisfies ActiveFile);
   return overrides;
+}
+
+/**
+ * Drop the active calendar override for a room (user resume).
+ * Also records a dismissal so reconcile does not immediately re-apply.
+ */
+export async function clearActiveOverrideForRoom(
+  dataDir: string,
+  roomId: string,
+): Promise<CalendarActiveOverride | null> {
+  const active = await loadActiveOverrides(dataDir);
+  const found = active.find((o) => o.roomId === roomId) ?? null;
+  if (!found) {
+    return null;
+  }
+  await saveActiveOverrides(
+    dataDir,
+    active.filter((o) => o.roomId !== roomId),
+  );
+  const until =
+    found.endsAt && Date.parse(found.endsAt) > Date.now()
+      ? found.endsAt
+      : new Date(Date.now() + 60 * 60_000).toISOString();
+  await addCalendarDismissal(dataDir, {
+    roomId: found.roomId,
+    eventUid: found.eventUid,
+    until,
+    dismissedAt: new Date().toISOString(),
+  });
+  return found;
+}
+
+export async function loadCalendarDismissals(
+  dataDir: string,
+): Promise<CalendarDismissal[]> {
+  const file = await readJson<DismissalsFile>(
+    path.join(dataDir, DISMISS_FILE),
+  );
+  const list = Array.isArray(file?.dismissals) ? file!.dismissals! : [];
+  const now = Date.now();
+  return list.filter((d) => d && Date.parse(d.until) > now);
+}
+
+export async function addCalendarDismissal(
+  dataDir: string,
+  dismissal: CalendarDismissal,
+): Promise<CalendarDismissal[]> {
+  const current = await loadCalendarDismissals(dataDir);
+  const next = [
+    ...current.filter(
+      (d) =>
+        !(d.roomId === dismissal.roomId && d.eventUid === dismissal.eventUid),
+    ),
+    dismissal,
+  ];
+  await writeJson(path.join(dataDir, DISMISS_FILE), {
+    dismissals: next,
+  } satisfies DismissalsFile);
+  return next;
+}
+
+export function isCalendarDismissed(
+  dismissals: CalendarDismissal[],
+  roomId: string,
+  eventUid: string,
+  at = new Date(),
+): boolean {
+  const t = at.getTime();
+  return dismissals.some(
+    (d) =>
+      d.roomId === roomId &&
+      d.eventUid === eventUid &&
+      Date.parse(d.until) > t,
+  );
 }
 
 export async function loadSelectedEventUids(
