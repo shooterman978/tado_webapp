@@ -383,7 +383,7 @@ export function ScheduleScreen({
             className="schedule__sync schedule__sync--secondary"
             onClick={onOpenCalendarRules}
           >
-            Kalenderregeln
+            Termine &amp; Heizung
           </button>
         ) : null}
         <CloudQuotaBadge quota={quota} />

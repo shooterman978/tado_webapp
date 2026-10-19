@@ -5,7 +5,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { CloudQuotaStatus, HealthStatus, ZonesResponse } from "@heizplan/shared";
-import { fetchCloudQuota, fetchHealth, fetchZones } from "./api";
+import { fetchCalendarStatus, fetchCloudQuota, fetchHealth, fetchZones } from "./api";
 import { BottomNav, type NavTab } from "./components/BottomNav";
 import { BridgeStatus } from "./components/BridgeStatus";
 import { CloudLinkPanel } from "./components/CloudLinkPanel";
@@ -23,6 +23,7 @@ import { ChevronDownIcon } from "./components/icons";
 const POLL_MS = 15_000;
 const HUMIDITY_KEY = "heizplan.showHumidity";
 const HOME_NAME_KEY = "heizplan.homeName";
+const CAL_TIP_DISMISS_KEY = "heizplan.calendarTipDismissed";
 
 type Overlay =
   | { kind: "none" }
@@ -55,6 +56,7 @@ export function App() {
   const [quota, setQuota] = useState<CloudQuotaStatus | null>(null);
   const [quotaLoading, setQuotaLoading] = useState(true);
   const [quotaUnavailable, setQuotaUnavailable] = useState<string | null>(null);
+  const [showCalendarTip, setShowCalendarTip] = useState(false);
   const [homeName] = useState(() => {
     try {
       return localStorage.getItem(HOME_NAME_KEY) || "Zuhause";
@@ -124,6 +126,26 @@ export function App() {
   }, [load]);
 
   useEffect(() => {
+    let cancelled = false;
+    const dismissed = readBool(CAL_TIP_DISMISS_KEY, false);
+    if (dismissed) {
+      return;
+    }
+    void fetchCalendarStatus()
+      .then((s) => {
+        if (!cancelled && (s.rules?.length ?? 0) === 0) {
+          setShowCalendarTip(true);
+        }
+      })
+      .catch(() => {
+        /* tip optional */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
     try {
       localStorage.setItem(HUMIDITY_KEY, showHumidity ? "1" : "0");
     } catch {
@@ -169,11 +191,27 @@ export function App() {
         <CalendarRulesScreen
           zones={zones?.zones ?? []}
           focusRoomId={overlay.zoneId ?? null}
-          onBack={() =>
-            overlay.zoneId
-              ? setOverlay({ kind: "schedule", zoneId: overlay.zoneId })
-              : setOverlay({ kind: "none" })
-          }
+          onBack={() => {
+            void fetchCalendarStatus()
+              .then((s) => {
+                if ((s.rules?.length ?? 0) > 0) {
+                  setShowCalendarTip(false);
+                  try {
+                    localStorage.setItem(CAL_TIP_DISMISS_KEY, "1");
+                  } catch {
+                    /* ignore */
+                  }
+                }
+              })
+              .catch(() => {
+                /* ignore */
+              });
+            if (overlay.zoneId) {
+              setOverlay({ kind: "schedule", zoneId: overlay.zoneId });
+            } else {
+              setOverlay({ kind: "none" });
+            }
+          }}
           onQuotaChange={setQuota}
         />
       </div>
@@ -284,6 +322,19 @@ export function App() {
               </span>
               <CloudLinkPanel naming={zones.naming} onLinked={() => void load({ quiet: true })} />
             </div>
+          ) : null}
+
+          {!offline && showCalendarTip ? (
+            <button
+              type="button"
+              className="callout callout--calendar"
+              onClick={() => setOverlay({ kind: "calendar-rules" })}
+            >
+              <strong>Termine steuern die Heizung</strong>
+              <span>
+                Kurzer Assistent: Termin wählen → Räume → Temperatur. Auch unter Einstellungen.
+              </span>
+            </button>
           ) : null}
 
           {!offline ? (

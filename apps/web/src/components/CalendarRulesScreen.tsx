@@ -1,17 +1,14 @@
 /**
- * Calendar rules editor — pattern / event-UID → rooms/temp.
- * Priority: CalendarOverride > Overlay > Cloud baseline (HAP overlay preferred).
+ * Calendar rules — guided wizard for non-technical users.
+ * Everyday German; expert options under „Erweitert“. API/engine unchanged.
  *
  * @package @heizplan/web
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import type {
-  CalendarApplyPath,
   CalendarEventPreview,
-  CalendarMatchKind,
   CalendarRule,
-  CalendarRuleMode,
   CalendarStatusResponse,
   CloudQuotaStatus,
   Zone,
@@ -23,10 +20,9 @@ import {
   evaluateCalendarRules,
   fetchCalendarEvents,
   fetchCalendarStatus,
+  saveCalendarConnection,
   saveCalendarEventSelection,
-  updateCalendarRule,
 } from "../api";
-import { CloudQuotaBadge } from "./CloudQuotaBadge";
 import { BackIcon } from "./icons";
 import { CalendarConnectionPanel } from "./CalendarConnectionPanel";
 
@@ -37,62 +33,15 @@ interface CalendarRulesScreenProps {
   focusRoomId?: string | null;
 }
 
-interface Draft {
-  name: string;
-  matchKind: CalendarMatchKind;
-  matchValue: string;
-  calendarId: string;
-  roomIds: string[];
-  mode: CalendarRuleMode;
-  targetTempC: string;
-  applyPath: CalendarApplyPath;
-  priority: string;
-  enabled: boolean;
-}
+type WizardStep =
+  | "overview"
+  | "connect"
+  | "events"
+  | "setup"
+  | "done"
+  | "advanced";
 
-function emptyDraft(focusRoomId?: string | null): Draft {
-  return {
-    name: "",
-    matchKind: "title_contains",
-    matchValue: "Büro",
-    calendarId: "",
-    roomIds: focusRoomId ? [focusRoomId] : [],
-    mode: "heat",
-    targetTempC: "20",
-    applyPath: "hap_overlay",
-    priority: "100",
-    enabled: true,
-  };
-}
-
-function draftFromRule(rule: CalendarRule): Draft {
-  return {
-    name: rule.name,
-    matchKind: rule.match.kind,
-    matchValue: rule.match.value,
-    calendarId: rule.calendarId ?? "",
-    roomIds: [...rule.roomIds],
-    mode: rule.mode,
-    targetTempC: rule.targetTempC != null ? String(rule.targetTempC) : "20",
-    applyPath: rule.applyPath,
-    priority: String(rule.priority),
-    enabled: rule.enabled,
-  };
-}
-
-function toPayload(draft: Draft): Partial<CalendarRule> {
-  return {
-    name: draft.name.trim() || draft.matchValue.trim(),
-    enabled: draft.enabled,
-    calendarId: draft.calendarId || null,
-    match: { kind: draft.matchKind, value: draft.matchValue.trim() },
-    roomIds: draft.roomIds,
-    mode: draft.mode,
-    targetTempC: draft.mode === "off" ? null : Number(draft.targetTempC),
-    applyPath: draft.applyPath,
-    priority: Number(draft.priority) || 100,
-  };
-}
+const TEMP_PRESETS = [18, 19, 20, 21, 22] as const;
 
 function formatWhen(iso: string): string {
   try {
@@ -108,36 +57,56 @@ function formatWhen(iso: string): string {
   }
 }
 
+function rulePlainSummary(rule: CalendarRule, zones: Zone[]): string {
+  const rooms = rule.roomIds
+    .map((id) => zones.find((z) => z.id === id)?.name ?? id)
+    .join(", ");
+  const temp =
+    rule.mode === "off"
+      ? "Aus"
+      : `${rule.targetTempC?.toFixed(0) ?? "—"}°`;
+  const when =
+    rule.match.kind === "event_uid"
+      ? rule.name
+      : `wenn „${rule.match.value}“ im Titel`;
+  return `${when} → ${rooms || "kein Raum"} auf ${temp}`;
+}
+
 export function CalendarRulesScreen({
   zones,
   onBack,
   onQuotaChange,
   focusRoomId,
 }: CalendarRulesScreenProps) {
+  const [step, setStep] = useState<WizardStep>("overview");
   const [status, setStatus] = useState<CalendarStatusResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
-  /** Only true during mutating actions — does NOT disable Neue Regel / Events prüfen. */
   const [actionBusy, setActionBusy] = useState(false);
   const [eventsBusy, setEventsBusy] = useState(false);
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [creating, setCreating] = useState(false);
-  const [draft, setDraft] = useState<Draft>(() => emptyDraft(focusRoomId));
-  const [evalMsg, setEvalMsg] = useState<string | null>(null);
   const [events, setEvents] = useState<CalendarEventPreview[]>([]);
-  const [selectedUids, setSelectedUids] = useState<string[]>([]);
-  const [eventsFetchedAt, setEventsFetchedAt] = useState<string | null>(null);
-  const [selectionHint, setSelectionHint] = useState<string | null>(null);
-  const onQuotaChangeRef = useRef(onQuotaChange);
-  onQuotaChangeRef.current = onQuotaChange;
+  const [picked, setPicked] = useState<CalendarEventPreview | null>(null);
+  const [roomIds, setRoomIds] = useState<string[]>(
+    focusRoomId ? [focusRoomId] : [],
+  );
+  const [tempC, setTempC] = useState(20);
+  const [doneMsg, setDoneMsg] = useState<string | null>(null);
+  const [connectUser, setConnectUser] = useState("");
+  const [connectPass, setConnectPass] = useState("");
+  const onQuotaRef = useRef(onQuotaChange);
+  onQuotaRef.current = onQuotaChange;
 
   const refreshStatus = useCallback(async () => {
     try {
       const s = await fetchCalendarStatus();
       setStatus(s);
-      setSelectedUids(s.selectedUids ?? []);
-      onQuotaChangeRef.current?.(s.quota);
+      onQuotaRef.current?.(s.quota);
+      if (s.connection.username) {
+        setConnectUser(s.connection.username);
+      }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Kalenderstatus laden fehlgeschlagen");
+      setError(
+        err instanceof Error ? err.message : "Status konnte nicht geladen werden",
+      );
     }
   }, []);
 
@@ -145,107 +114,131 @@ export function CalendarRulesScreen({
     void refreshStatus();
   }, [refreshStatus]);
 
-  const loadEvents = useCallback(async () => {
+  const configured = Boolean(status?.connection.configured);
+  const rules = status?.rules ?? [];
+
+  function startNewRule(): void {
+    setError(null);
+    setPicked(null);
+    setDoneMsg(null);
+    setRoomIds(focusRoomId ? [focusRoomId] : []);
+    setTempC(20);
+    setStep(configured ? "events" : "connect");
+    if (configured) {
+      void loadEvents();
+    }
+  }
+
+  async function loadEvents(): Promise<void> {
     setEventsBusy(true);
     setError(null);
     try {
       const res = await fetchCalendarEvents();
       setEvents(res.events);
-      setSelectedUids(res.selectedUids);
-      setEventsFetchedAt(res.fetchedAt);
-      setSelectionHint(
-        res.selectionActive
-          ? `${res.selectedUids.length} Event(s) ausgewählt — nur diese werden ausgewertet.`
-          : "Keine Auswahl — Muster-Regeln gelten für alle geladenen Events.",
-      );
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Events laden fehlgeschlagen");
-    } finally {
-      setEventsBusy(false);
-    }
-  }, []);
-
-  async function persistSelection(next: string[]): Promise<void> {
-    setEventsBusy(true);
-    setError(null);
-    try {
-      const res = await saveCalendarEventSelection(next);
-      setEvents(res.events);
-      setSelectedUids(res.selectedUids);
-      setEventsFetchedAt(res.fetchedAt);
-      setSelectionHint(
-        res.selectionActive
-          ? `${res.selectedUids.length} Event(s) gespeichert — Evaluate nutzt nur diese.`
-          : "Auswahl geleert — wieder alle Events (Muster-Regeln).",
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Termine konnten nicht geladen werden",
       );
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Auswahl speichern fehlgeschlagen");
     } finally {
       setEventsBusy(false);
     }
   }
 
-  function toggleEventUid(uid: string): void {
-    const next = selectedUids.includes(uid)
-      ? selectedUids.filter((id) => id !== uid)
-      : [...selectedUids, uid];
-    void persistSelection(next);
-  }
-
-  function ruleFromEvent(ev: CalendarEventPreview): void {
-    setCreating(true);
-    setEditingId(null);
-    setDraft({
-      ...emptyDraft(focusRoomId),
-      name: ev.summary,
-      matchKind: "event_uid",
-      matchValue: ev.uid,
-      calendarId: ev.calendarId,
-    });
-    if (!selectedUids.includes(ev.uid)) {
-      void persistSelection([...selectedUids, ev.uid]);
-    }
-  }
-
-  function toggleRoom(roomId: string): void {
-    setDraft((d) => ({
-      ...d,
-      roomIds: d.roomIds.includes(roomId)
-        ? d.roomIds.filter((id) => id !== roomId)
-        : [...d.roomIds, roomId],
-    }));
-  }
-
-  async function saveDraft(): Promise<void> {
+  async function saveSimpleConnect(): Promise<void> {
     setActionBusy(true);
     setError(null);
     try {
-      const payload = toPayload(draft);
-      if (editingId) {
-        await updateCalendarRule(editingId, payload);
-      } else {
-        await createCalendarRule(payload);
-      }
-      setCreating(false);
-      setEditingId(null);
-      setDraft(emptyDraft(focusRoomId));
+      await saveCalendarConnection({
+        url: "https://caldav.icloud.com",
+        username: connectUser.trim(),
+        appPassword: connectPass.trim() || undefined,
+      });
+      setConnectPass("");
       await refreshStatus();
+      setStep("events");
+      await loadEvents();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Regel speichern fehlgeschlagen");
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Verbindung fehlgeschlagen — App-Passwort prüfen",
+      );
     } finally {
       setActionBusy(false);
     }
   }
 
-  async function remove(id: string): Promise<void> {
+  function pickEvent(ev: CalendarEventPreview): void {
+    setPicked(ev);
+    setStep("setup");
+  }
+
+  function toggleRoom(id: string): void {
+    setRoomIds((prev) =>
+      prev.includes(id) ? prev.filter((r) => r !== id) : [...prev, id],
+    );
+  }
+
+  async function finishRule(): Promise<void> {
+    if (!picked) {
+      return;
+    }
+    if (roomIds.length === 0) {
+      setError("Bitte mindestens einen Raum auswählen.");
+      return;
+    }
+    setActionBusy(true);
+    setError(null);
+    try {
+      const selected = Array.from(
+        new Set([...(status?.selectedUids ?? []), picked.uid]),
+      );
+      await saveCalendarEventSelection(selected);
+      await createCalendarRule({
+        name: picked.summary,
+        enabled: true,
+        calendarId: picked.calendarId,
+        match: { kind: "event_uid", value: picked.uid },
+        roomIds,
+        mode: "heat",
+        targetTempC: tempC,
+        applyPath: "hap_overlay",
+        priority: 200,
+      });
+      try {
+        const result = await evaluateCalendarRules();
+        onQuotaRef.current?.(result.quota);
+        setDoneMsg(
+          result.applied > 0 || result.matched > 0
+            ? "Alles eingerichtet. Wenn der Termin läuft, wird geheizt."
+            : "Gespeichert. Sobald der Termin beginnt, wird geheizt.",
+        );
+      } catch (err) {
+        if (err instanceof ApiError && err.quota) {
+          onQuotaRef.current?.(err.quota);
+        }
+        setDoneMsg(
+          "Regel gespeichert. Aktivierung folgt automatisch oder über „Jetzt prüfen“.",
+        );
+      }
+      await refreshStatus();
+      setStep("done");
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Speichern fehlgeschlagen",
+      );
+    } finally {
+      setActionBusy(false);
+    }
+  }
+
+  async function removeRule(id: string): Promise<void> {
     setActionBusy(true);
     setError(null);
     try {
       await deleteCalendarRule(id);
-      if (editingId === id) {
-        setEditingId(null);
-        setCreating(false);
-      }
       await refreshStatus();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Löschen fehlgeschlagen");
@@ -254,382 +247,399 @@ export function CalendarRulesScreen({
     }
   }
 
-  async function runEvaluate(): Promise<void> {
+  async function runCheck(): Promise<void> {
     setActionBusy(true);
     setError(null);
-    setEvalMsg(null);
     try {
       const result = await evaluateCalendarRules();
-      onQuotaChangeRef.current?.(result.quota);
-      setEvalMsg(result.message);
+      onQuotaRef.current?.(result.quota);
+      setDoneMsg(result.message || "Geprüft.");
       await refreshStatus();
     } catch (err) {
       if (err instanceof ApiError && err.quota) {
-        onQuotaChangeRef.current?.(err.quota);
+        onQuotaRef.current?.(err.quota);
       }
-      setError(err instanceof Error ? err.message : "Auswerten fehlgeschlagen");
+      setError(err instanceof Error ? err.message : "Prüfen fehlgeschlagen");
     } finally {
       setActionBusy(false);
     }
   }
 
-  const rules = status?.rules ?? [];
-  const active = status?.active ?? [];
-  const calendars = status?.connection.calendars ?? [];
-  const configured = Boolean(status?.connection.configured);
-  /** Primary actions stay clickable during background refresh. */
-  const primaryDisabled = actionBusy;
+  function stepBack(): void {
+    setError(null);
+    if (step === "connect" || step === "advanced") {
+      setStep("overview");
+      return;
+    }
+    if (step === "events") {
+      setStep(configured ? "overview" : "connect");
+      return;
+    }
+    if (step === "setup") {
+      setStep("events");
+      return;
+    }
+    if (step === "done") {
+      setStep("overview");
+      return;
+    }
+    onBack();
+  }
+
+  const headerTitle =
+    step === "overview"
+      ? "Termine & Heizung"
+      : step === "connect"
+        ? "iPhone-Kalender"
+        : step === "events"
+          ? "Termin wählen"
+          : step === "setup"
+            ? "Räume & Wärme"
+            : step === "done"
+              ? "Fertig"
+              : "Erweitert";
 
   return (
-    <div className="calendar-rules">
+    <div className="cal-wiz">
       <header className="schedule__bar">
-        <button type="button" className="icon-btn-ghost" onClick={onBack} aria-label="Zurück">
+        <button
+          type="button"
+          className="icon-btn-ghost"
+          onClick={step === "overview" ? onBack : stepBack}
+          aria-label={step === "overview" ? "Zurück" : "Vorheriger Schritt"}
+        >
           <BackIcon />
         </button>
-        <h1>Kalenderregeln</h1>
-        <CloudQuotaBadge quota={status?.quota ?? null} compact />
+        <h1>{headerTitle}</h1>
+        <span className="cal-wiz__step-pill" aria-hidden="true">
+          {step === "overview"
+            ? ""
+            : step === "connect"
+              ? "1/4"
+              : step === "events"
+                ? "2/4"
+                : step === "setup"
+                  ? "3/4"
+                  : step === "done"
+                    ? "4/4"
+                    : ""}
+        </span>
       </header>
-      <p className="schedule__note">
-        Events auswählen und/oder Muster-Regeln — überschreibt den Tado-Zeitplan (über Overlay &amp;
-        Cloud-Baseline).
-      </p>
-
-      <section className="calendar-rules__section">
-        <h2 className="calendar-rules__h">iCloud / CalDAV</h2>
-        <CalendarConnectionPanel
-          onChanged={() => {
-            void refreshStatus();
-          }}
-        />
-      </section>
-
-      <section className="calendar-rules__section">
-        <div className="calendar-rules__row-head">
-          <h2 className="calendar-rules__h">Kommende Events</h2>
-          <button
-            type="button"
-            className="settings-quota-save"
-            disabled={eventsBusy || !configured}
-            onClick={() => void loadEvents()}
-          >
-            {eventsBusy ? "Laden…" : "Events laden"}
-          </button>
-        </div>
-        <p className="settings__hint">
-          Haken = Event wird bei „Events prüfen“ berücksichtigt. Ohne Haken gelten nur
-          Muster-Regeln auf alle Events. „Regel daraus“ bindet fest an die Event-UID.
-        </p>
-        {selectionHint ? (
-          <p className="settings-row__meta" role="status">
-            {selectionHint}
-          </p>
-        ) : null}
-        {eventsFetchedAt ? (
-          <p className="settings-row__meta">
-            Stand {new Date(eventsFetchedAt).toLocaleString("de-DE")}
-            {selectedUids.length > 0 ? ` · ${selectedUids.length} ausgewählt` : ""}
-          </p>
-        ) : (
-          <p className="settings-row__meta">Noch nicht geladen — „Events laden“ tippen.</p>
-        )}
-        {events.length > 0 ? (
-          <ul className="calendar-rules__list calendar-rules__events">
-            {events.map((ev) => {
-              const checked = selectedUids.includes(ev.uid);
-              return (
-                <li key={ev.uid} className="calendar-rules__card calendar-rules__event">
-                  <label className="calendar-rules__event-check">
-                    <input
-                      type="checkbox"
-                      checked={checked}
-                      disabled={eventsBusy}
-                      onChange={() => toggleEventUid(ev.uid)}
-                    />
-                    <span className="calendar-rules__event-body">
-                      <strong>{ev.summary}</strong>
-                      <span className="settings-row__meta">
-                        {formatWhen(ev.startsAt)} – {formatWhen(ev.endsAt)} · {ev.calendarName}
-                      </span>
-                    </span>
-                  </label>
-                  <button
-                    type="button"
-                    className="calendar-conn__secondary"
-                    disabled={actionBusy}
-                    onClick={() => ruleFromEvent(ev)}
-                  >
-                    Regel daraus
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
-        ) : null}
-        {selectedUids.length > 0 ? (
-          <button
-            type="button"
-            className="calendar-conn__secondary"
-            disabled={eventsBusy}
-            onClick={() => void persistSelection([])}
-          >
-            Auswahl leeren
-          </button>
-        ) : null}
-      </section>
-
-      <section className="calendar-rules__section">
-        <div className="calendar-rules__row-head">
-          <h2 className="calendar-rules__h">Regeln</h2>
-          <button
-            type="button"
-            className="settings-quota-save"
-            disabled={primaryDisabled}
-            onClick={() => {
-              setCreating(true);
-              setEditingId(null);
-              setDraft(emptyDraft(focusRoomId));
-            }}
-          >
-            Neue Regel
-          </button>
-        </div>
-        <p className="settings__hint">
-          Priorität: <strong>Kalender</strong> &gt; manuelles Overlay &gt; Cloud-Zeitplan. Standard:
-          HAP-Overlay (0 Cloud).
-        </p>
-
-        {rules.length === 0 && !creating ? (
-          <p className="settings-row__meta">
-            Noch keine Regeln — Event anhaken + „Regel daraus“, oder Muster „Büro“.
-          </p>
-        ) : null}
-
-        <ul className="calendar-rules__list">
-          {rules.map((rule) => (
-            <li key={rule.id} className="calendar-rules__card">
-              <div className="calendar-rules__card-main">
-                <strong>{rule.name}</strong>
-                <span className="settings-row__meta">
-                  {rule.enabled ? "an" : "aus"} · {rule.match.kind} „
-                  {rule.match.kind === "event_uid"
-                    ? `${rule.match.value.slice(0, 12)}…`
-                    : rule.match.value}
-                  “ →{" "}
-                  {rule.roomIds
-                    .map((id) => zones.find((z) => z.id === id)?.name ?? id)
-                    .join(", ")}{" "}
-                  ·{" "}
-                  {rule.mode === "off"
-                    ? "Aus"
-                    : `${rule.targetTempC?.toFixed(1) ?? "—"}°`}{" "}
-                  · {rule.applyPath === "hap_overlay" ? "HAP" : "Cloud"}
-                </span>
-              </div>
-              <div className="calendar-rules__card-actions">
-                <button
-                  type="button"
-                  disabled={actionBusy}
-                  onClick={() => {
-                    setEditingId(rule.id);
-                    setCreating(true);
-                    setDraft(draftFromRule(rule));
-                  }}
-                >
-                  Bearbeiten
-                </button>
-                <button type="button" disabled={actionBusy} onClick={() => void remove(rule.id)}>
-                  Löschen
-                </button>
-              </div>
-            </li>
-          ))}
-        </ul>
-
-        {creating ? (
-          <form
-            className="calendar-rules__form"
-            onSubmit={(e) => {
-              e.preventDefault();
-              void saveDraft();
-            }}
-          >
-            <h3>{editingId ? "Regel bearbeiten" : "Neue Regel"}</h3>
-            <label className="calendar-conn__field">
-              <span>Name</span>
-              <input
-                value={draft.name}
-                onChange={(e) => setDraft({ ...draft, name: e.target.value })}
-                placeholder="Büro-Heizung"
-              />
-            </label>
-            <label className="calendar-conn__field">
-              <span>Match</span>
-              <select
-                value={draft.matchKind}
-                onChange={(e) =>
-                  setDraft({
-                    ...draft,
-                    matchKind: e.target.value as CalendarMatchKind,
-                  })
-                }
-              >
-                <option value="title_contains">Titel enthält</option>
-                <option value="title_equals">Titel gleich</option>
-                <option value="title_regex">Titel Regex</option>
-                <option value="event_uid">Event-UID (Picker)</option>
-              </select>
-            </label>
-            <label className="calendar-conn__field">
-              <span>{draft.matchKind === "event_uid" ? "Event-UID" : "Muster"}</span>
-              <input
-                value={draft.matchValue}
-                onChange={(e) => setDraft({ ...draft, matchValue: e.target.value })}
-                required
-                placeholder={draft.matchKind === "event_uid" ? "UID aus Picker" : "Büro"}
-              />
-            </label>
-            <label className="calendar-conn__field">
-              <span>Kalender</span>
-              <select
-                value={draft.calendarId}
-                onChange={(e) => setDraft({ ...draft, calendarId: e.target.value })}
-              >
-                <option value="">Alle Kalender</option>
-                {calendars.map((cal) => (
-                  <option key={cal.id} value={cal.id}>
-                    {cal.displayName}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <fieldset className="calendar-rules__rooms">
-              <legend>Räume</legend>
-              {zones.map((z) => (
-                <label key={z.id} className="calendar-rules__room">
-                  <input
-                    type="checkbox"
-                    checked={draft.roomIds.includes(z.id)}
-                    onChange={() => toggleRoom(z.id)}
-                  />
-                  {z.name}
-                </label>
-              ))}
-            </fieldset>
-            <label className="calendar-conn__field">
-              <span>Modus</span>
-              <select
-                value={draft.mode}
-                onChange={(e) =>
-                  setDraft({ ...draft, mode: e.target.value as CalendarRuleMode })
-                }
-              >
-                <option value="heat">Heizen</option>
-                <option value="eco">Eco</option>
-                <option value="off">Aus</option>
-              </select>
-            </label>
-            {draft.mode !== "off" ? (
-              <label className="calendar-conn__field">
-                <span>Soll °C</span>
-                <input
-                  type="number"
-                  min={5}
-                  max={30}
-                  step={0.5}
-                  value={draft.targetTempC}
-                  onChange={(e) => setDraft({ ...draft, targetTempC: e.target.value })}
-                />
-              </label>
-            ) : null}
-            <label className="calendar-conn__field">
-              <span>Anwenden über</span>
-              <select
-                value={draft.applyPath}
-                onChange={(e) =>
-                  setDraft({
-                    ...draft,
-                    applyPath: e.target.value as CalendarApplyPath,
-                  })
-                }
-              >
-                <option value="hap_overlay">HAP-Overlay (empfohlen, 0 Cloud)</option>
-                <option value="cloud_write">Cloud (nur wenn Quota übrig)</option>
-              </select>
-            </label>
-            <label className="calendar-conn__field">
-              <span>Priorität</span>
-              <input
-                type="number"
-                value={draft.priority}
-                onChange={(e) => setDraft({ ...draft, priority: e.target.value })}
-              />
-            </label>
-            <label className="settings-row settings-row--toggle">
-              <span className="settings-row__label">Aktiv</span>
-              <input
-                type="checkbox"
-                checked={draft.enabled}
-                onChange={(e) => setDraft({ ...draft, enabled: e.target.checked })}
-              />
-            </label>
-            <div className="calendar-conn__actions">
-              <button type="submit" className="settings-quota-save" disabled={actionBusy}>
-                Speichern
-              </button>
-              <button
-                type="button"
-                className="calendar-conn__secondary"
-                disabled={actionBusy}
-                onClick={() => {
-                  setCreating(false);
-                  setEditingId(null);
-                }}
-              >
-                Abbrechen
-              </button>
-            </div>
-          </form>
-        ) : null}
-      </section>
-
-      <section className="calendar-rules__section">
-        <div className="calendar-rules__row-head">
-          <h2 className="calendar-rules__h">Jetzt auswerten</h2>
-          <button
-            type="button"
-            className="settings-quota-save"
-            disabled={primaryDisabled || !configured}
-            onClick={() => void runEvaluate()}
-          >
-            {actionBusy ? "Prüfe…" : "Events prüfen"}
-          </button>
-        </div>
-        {evalMsg ? (
-          <p className="settings__hint" role="status">
-            {evalMsg}
-          </p>
-        ) : null}
-        {active.length > 0 ? (
-          <ul className="calendar-rules__list">
-            {active.map((a) => (
-              <li key={`${a.roomId}-${a.eventUid}`} className="calendar-rules__card">
-                <strong>{a.eventSummary}</strong>
-                <span className="settings-row__meta">
-                  {zones.find((z) => z.id === a.roomId)?.name ?? a.roomId} · bis{" "}
-                  {new Date(a.endsAt).toLocaleString("de-DE")} · {a.applyPath}
-                </span>
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <p className="settings-row__meta">Kein aktiver Kalender-Override.</p>
-        )}
-      </section>
 
       {error ? (
         <p className="error-state" role="alert">
           {error}
         </p>
+      ) : null}
+
+      {step === "overview" ? (
+        <div className="cal-wiz__body">
+          <p className="cal-wiz__lead">
+            Wenn ein Termin im iPhone-Kalender läuft, kann die Heizung automatisch
+            mitgehen — ganz ohne Technik-Einstellungen.
+          </p>
+
+          <button
+            type="button"
+            className="cal-wiz__primary"
+            disabled={actionBusy}
+            onClick={startNewRule}
+          >
+            Neue Regel anlegen
+          </button>
+
+          {!configured ? (
+            <p className="cal-wiz__hint">
+              Noch nicht mit dem iPhone-Kalender verbunden — der Assistent hilft
+              Schritt für Schritt.
+            </p>
+          ) : (
+            <p className="cal-wiz__hint">
+              Kalender verbunden
+              {status?.connection.username
+                ? ` (${status.connection.username})`
+                : ""}
+              .
+            </p>
+          )}
+
+          {rules.length > 0 ? (
+            <>
+              <h2 className="cal-wiz__h">Eure Regeln</h2>
+              <ul className="cal-wiz__list">
+                {rules.map((rule) => (
+                  <li key={rule.id} className="cal-wiz__card">
+                    <div>
+                      <strong>{rule.name}</strong>
+                      <span className="cal-wiz__meta">
+                        {rulePlainSummary(rule, zones)}
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      className="cal-wiz__ghost"
+                      disabled={actionBusy}
+                      onClick={() => void removeRule(rule.id)}
+                    >
+                      Entfernen
+                    </button>
+                  </li>
+                ))}
+              </ul>
+              <button
+                type="button"
+                className="cal-wiz__secondary"
+                disabled={actionBusy || !configured}
+                onClick={() => void runCheck()}
+              >
+                Jetzt prüfen
+              </button>
+            </>
+          ) : (
+            <p className="cal-wiz__meta">Noch keine Regeln — tippe oben auf „Neue Regel anlegen“.</p>
+          )}
+
+          {(status?.active.length ?? 0) > 0 ? (
+            <p className="cal-wiz__active" role="status">
+              Gerade aktiv: {status!.active.map((a) => a.eventSummary).join(", ")}
+            </p>
+          ) : null}
+
+          <button
+            type="button"
+            className="cal-wiz__link"
+            onClick={() => setStep("advanced")}
+          >
+            Erweiterte Einstellungen
+          </button>
+        </div>
+      ) : null}
+
+      {step === "connect" ? (
+        <div className="cal-wiz__body">
+          <p className="cal-wiz__lead">
+            Einmalig: Apple-ID und ein <strong>App-Passwort</strong> (nicht das
+            normale iPhone-Passwort).
+          </p>
+          <ol className="cal-wiz__howto">
+            <li>Auf dem iPhone: Einstellungen → [dein Name] → Anmeldung &amp; Sicherheit</li>
+            <li>„App-Passwort“ erzeugen (Name z. B. Heizplan)</li>
+            <li>Hier eintragen und weiter</li>
+          </ol>
+          <label className="cal-wiz__field">
+            <span>Apple-ID (E-Mail)</span>
+            <input
+              type="email"
+              value={connectUser}
+              disabled={actionBusy}
+              autoComplete="username"
+              onChange={(e) => setConnectUser(e.target.value)}
+              placeholder="name@icloud.com"
+            />
+          </label>
+          <label className="cal-wiz__field">
+            <span>App-Passwort</span>
+            <input
+              type="password"
+              value={connectPass}
+              disabled={actionBusy}
+              autoComplete="new-password"
+              onChange={(e) => setConnectPass(e.target.value)}
+              placeholder="xxxx-xxxx-xxxx-xxxx"
+            />
+          </label>
+          <div className="cal-wiz__nav">
+            <button type="button" className="cal-wiz__ghost" onClick={stepBack}>
+              Zurück
+            </button>
+            <button
+              type="button"
+              className="cal-wiz__primary"
+              disabled={
+                actionBusy ||
+                !connectUser.trim() ||
+                (!connectPass.trim() && !status?.connection.hasPassword)
+              }
+              onClick={() => void saveSimpleConnect()}
+            >
+              {actionBusy ? "Verbinde…" : "Weiter"}
+            </button>
+          </div>
+        </div>
+      ) : null}
+
+      {step === "events" ? (
+        <div className="cal-wiz__body">
+          <p className="cal-wiz__lead">
+            Welcher Termin soll die Heizung steuern? Einfach antippen.
+          </p>
+          <button
+            type="button"
+            className="cal-wiz__secondary"
+            disabled={eventsBusy}
+            onClick={() => void loadEvents()}
+          >
+            {eventsBusy ? "Lade Termine…" : "Termine aktualisieren"}
+          </button>
+          {events.length === 0 && !eventsBusy ? (
+            <p className="cal-wiz__meta">
+              Keine kommenden Termine gefunden. Lege einen Termin im iPhone-Kalender
+              an und tippe auf „Termine aktualisieren“.
+            </p>
+          ) : null}
+          <ul className="cal-wiz__list">
+            {events.map((ev) => (
+              <li key={ev.uid}>
+                <button
+                  type="button"
+                  className="cal-wiz__event"
+                  disabled={actionBusy || eventsBusy}
+                  onClick={() => pickEvent(ev)}
+                >
+                  <strong>{ev.summary}</strong>
+                  <span className="cal-wiz__meta">
+                    {formatWhen(ev.startsAt)} – {formatWhen(ev.endsAt)}
+                    {ev.calendarName ? ` · ${ev.calendarName}` : ""}
+                  </span>
+                </button>
+              </li>
+            ))}
+          </ul>
+          <div className="cal-wiz__nav">
+            <button type="button" className="cal-wiz__ghost" onClick={stepBack}>
+              Zurück
+            </button>
+          </div>
+        </div>
+      ) : null}
+
+      {step === "setup" && picked ? (
+        <div className="cal-wiz__body">
+          <p className="cal-wiz__lead">
+            Termin: <strong>{picked.summary}</strong>
+            <br />
+            <span className="cal-wiz__meta">
+              {formatWhen(picked.startsAt)} – {formatWhen(picked.endsAt)}
+            </span>
+          </p>
+
+          <h2 className="cal-wiz__h">Welche Räume heizen?</h2>
+          <div className="cal-wiz__rooms">
+            {zones.map((z) => {
+              const on = roomIds.includes(z.id);
+              return (
+                <button
+                  key={z.id}
+                  type="button"
+                  className={
+                    on ? "cal-wiz__chip is-on" : "cal-wiz__chip"
+                  }
+                  onClick={() => toggleRoom(z.id)}
+                >
+                  {z.name}
+                </button>
+              );
+            })}
+          </div>
+
+          <h2 className="cal-wiz__h">Wie warm?</h2>
+          <div className="cal-wiz__temps">
+            {TEMP_PRESETS.map((t) => (
+              <button
+                key={t}
+                type="button"
+                className={
+                  tempC === t ? "cal-wiz__chip is-on" : "cal-wiz__chip"
+                }
+                onClick={() => setTempC(t)}
+              >
+                {t}°
+              </button>
+            ))}
+          </div>
+          <label className="cal-wiz__field">
+            <span>Oder genau einstellen (°C)</span>
+            <input
+              type="number"
+              min={5}
+              max={30}
+              step={0.5}
+              value={tempC}
+              onChange={(e) => setTempC(Number(e.target.value) || 20)}
+            />
+          </label>
+
+          <div className="cal-wiz__nav">
+            <button type="button" className="cal-wiz__ghost" onClick={stepBack}>
+              Zurück
+            </button>
+            <button
+              type="button"
+              className="cal-wiz__primary"
+              disabled={actionBusy || roomIds.length === 0}
+              onClick={() => void finishRule()}
+            >
+              {actionBusy ? "Speichere…" : "Fertig"}
+            </button>
+          </div>
+        </div>
+      ) : null}
+
+      {step === "done" ? (
+        <div className="cal-wiz__body">
+          <p className="cal-wiz__lead cal-wiz__lead--ok">
+            {doneMsg ?? "Gespeichert."}
+          </p>
+          {picked ? (
+            <p className="cal-wiz__meta">
+              {picked.summary}:{" "}
+              {roomIds
+                .map((id) => zones.find((z) => z.id === id)?.name ?? id)
+                .join(", ")}{" "}
+              auf {tempC}°
+            </p>
+          ) : null}
+          <button
+            type="button"
+            className="cal-wiz__primary"
+            onClick={() => {
+              setStep("overview");
+              setPicked(null);
+            }}
+          >
+            Zur Übersicht
+          </button>
+          <button
+            type="button"
+            className="cal-wiz__secondary"
+            disabled={actionBusy}
+            onClick={startNewRule}
+          >
+            Noch eine Regel
+          </button>
+        </div>
+      ) : null}
+
+      {step === "advanced" ? (
+        <div className="cal-wiz__body">
+          <p className="cal-wiz__hint">
+            Für Technik-Interessierte. Im Alltag reicht der Assistent oben.
+          </p>
+          <CalendarConnectionPanel
+            onChanged={() => {
+              void refreshStatus();
+            }}
+          />
+          <div className="cal-wiz__nav">
+            <button
+              type="button"
+              className="cal-wiz__primary"
+              onClick={() => setStep("overview")}
+            >
+              Zurück zur Übersicht
+            </button>
+          </div>
+        </div>
       ) : null}
     </div>
   );

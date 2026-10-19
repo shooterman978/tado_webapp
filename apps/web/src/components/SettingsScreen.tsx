@@ -138,20 +138,22 @@ export function SettingsScreen({
     <div className="settings">
       <h1 className="settings__title">Einstellungen</h1>
 
-      <p className="settings__section-label">Kalenderregeln</p>
+      <p className="settings__section-label">Termine &amp; Heizung</p>
       <div className="settings-group settings-group--feature">
         <button
           type="button"
           className="settings-row settings-row--button settings-row--feature"
           onClick={onOpenCalendarRules}
-          aria-label="Kalenderregeln öffnen"
+          aria-label="Termine und Heizung einrichten"
         >
           <span className="settings-row__circle" style={{ background: "#c0392b" }} aria-hidden="true">
             K
           </span>
           <span className="settings-row__label">
-            Kalenderregeln
-            <small className="settings-row__sub">iPhone / iCloud · Zeitplan überschreiben</small>
+            Termine steuern die Heizung
+            <small className="settings-row__sub">
+              Assistent · iPhone-Kalender · Schritt für Schritt
+            </small>
           </span>
           <span className="settings-row__meta">Öffnen</span>
           <ChevronIcon className="settings-row__chev" />
@@ -359,8 +361,8 @@ export function SettingsScreen({
           <span className="settings-row__circle" style={{ background: "#c0392b" }} aria-hidden="true">
             K
           </span>
-          <span className="settings-row__label">Kalenderregeln</span>
-          <span className="settings-row__meta">iPhone</span>
+          <span className="settings-row__label">Termine &amp; Heizung</span>
+          <span className="settings-row__meta">Assistent</span>
           <ChevronIcon className="settings-row__chev" />
         </button>
         <Row label="Raumluft-Komfort" glyph="L" circle="#1abc9c" muted />
@@ -382,7 +384,7 @@ export function SettingsScreen({
       </div>
 
       <p className="settings__hint">
-        Steuerung lokal (HomeKit). Kalenderregeln optional via CalDAV. Produktname: Heizplan.
+        Steuerung lokal (HomeKit). Termine optional über iPhone-Kalender. Produktname: Heizplan.
       </p>
     </div>
   );
