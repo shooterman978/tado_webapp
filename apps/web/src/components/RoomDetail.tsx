@@ -38,6 +38,8 @@ interface RoomDetailProps {
   onClose: () => void;
   onOpenSchedule: () => void;
   onOptimisticTarget: (zoneId: string, tempC: number | null) => void;
+  /** Clear manual overlay in local UI before / after resume API. */
+  onOptimisticResume: (zoneId: string) => void;
   onChanged: () => void;
 }
 
@@ -50,6 +52,23 @@ function tempFromY(clientY: number, rect: DOMRect): number {
   return Math.round(Math.min(MAX_T, Math.max(MIN_T, raw)) * 2) / 2;
 }
 
+function footerManualLabel(zone: Zone): string {
+  return overlayDurationLabel(zone) ?? "Bis du den Zeitplan fortsetzt";
+}
+
+function footerStatusLabel(zone: Zone, off: boolean): string {
+  if (zone.overlayActive) {
+    return footerManualLabel(zone);
+  }
+  if (off) {
+    return "Aus / Frostschutz";
+  }
+  if (zone.onSchedule) {
+    return "Folgt dem Zeitplan";
+  }
+  return "Folgt dem Zeitplan";
+}
+
 export function RoomDetail({
   zone,
   interactive,
@@ -57,6 +76,7 @@ export function RoomDetail({
   onClose,
   onOpenSchedule,
   onOptimisticTarget,
+  onOptimisticResume,
   onChanged,
 }: RoomDetailProps) {
   const [draft, setDraft] = useState(zone.targetTempC ?? 20);
@@ -139,16 +159,18 @@ export function RoomDetail({
   }
 
   async function resume(): Promise<void> {
-    if (!interactive) {
+    if (!interactive || !zone.overlayActive) {
       return;
     }
     setBusy(true);
     setError(null);
+    onOptimisticResume(zone.id);
     try {
       await clearZoneOverlay(zone.id);
       onChanged();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Zeitplan fehlgeschlagen");
+      onChanged();
     } finally {
       setBusy(false);
     }
@@ -331,32 +353,34 @@ export function RoomDetail({
       <div className="room-detail__bottom">
         <button
           type="button"
-          className="room-detail__resume"
-          disabled={busy || !interactive}
+          className={[
+            "room-detail__resume",
+            !zone.overlayActive ? "is-idle" : "",
+          ]
+            .filter(Boolean)
+            .join(" ")}
+          disabled={busy || !interactive || !zone.overlayActive}
+          aria-label={
+            zone.overlayActive
+              ? "Zeitplan fortsetzen"
+              : "Zeitplan läuft bereits"
+          }
           onClick={() => void resume()}
         >
           <ScheduleResumeIcon />
-          Zeitplan fortsetzen
+          {zone.overlayActive ? "Zeitplan fortsetzen" : "Zeitplan aktiv"}
         </button>
 
         <footer className="room-detail__footer">
           <div className="room-detail__footer-main">
-            <HandIcon />
-            <span>
-              {zone.overlayActive
-                ? overlayDurationLabel(zone)
-                : zone.onSchedule
-                  ? "Bis du den Zeitplan fortsetzt"
-                  : off
-                    ? "Aus / Frostschutz"
-                    : "Bis du den Zeitplan fortsetzt"}
-            </span>
+            {zone.overlayActive ? <HandIcon /> : <ScheduleIcon />}
+            <span>{footerStatusLabel(zone, off)}</span>
           </div>
           <button
             type="button"
             className="room-detail__edit"
             aria-label="Overlay bearbeiten"
-            disabled={!interactive}
+            disabled={!interactive || off}
             onClick={() => {
               if (!interactive || off) {
                 return;

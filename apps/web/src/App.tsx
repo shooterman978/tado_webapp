@@ -172,6 +172,29 @@ export function App() {
                 targetTempC: tempC,
                 overlayActive: tempC !== null,
                 onSchedule: false,
+                overlayEndsAt: null,
+                updatedAt: new Date().toISOString(),
+              }
+            : z,
+        ),
+      };
+    });
+  }
+
+  function patchResume(zoneId: string): void {
+    setZones((prev) => {
+      if (!prev) {
+        return prev;
+      }
+      return {
+        ...prev,
+        zones: prev.zones.map((z) =>
+          z.id === zoneId
+            ? {
+                ...z,
+                overlayActive: false,
+                onSchedule: z.targetTempC != null,
+                overlayEndsAt: null,
                 updatedAt: new Date().toISOString(),
               }
             : z,
@@ -243,6 +266,7 @@ export function App() {
           onClose={() => setOverlay({ kind: "none" })}
           onOpenSchedule={() => setOverlay({ kind: "schedule", zoneId: roomZone.id })}
           onOptimisticTarget={patchTarget}
+          onOptimisticResume={patchResume}
           onChanged={() => void load({ quiet: true })}
         />
       </div>

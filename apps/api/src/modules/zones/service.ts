@@ -374,15 +374,21 @@ export async function clearZoneOverlay(zoneId: string): Promise<void> {
   const paired = await requirePairedBridge();
   const deviceIds = await deviceIdsFor(zoneId);
 
+  const errors: string[] = [];
   for (const deviceId of deviceIds) {
     try {
       await paired.clearOverlay(deviceId);
     } catch (err) {
-      console.warn(
-        `[zones] clearOverlay ${deviceId}:`,
-        err instanceof Error ? err.message : err,
-      );
+      const message =
+        err instanceof Error ? err.message : `device ${deviceId} failed`;
+      errors.push(message);
+      console.warn(`[zones] clearOverlay ${deviceId}:`, message);
     }
+  }
+  // Local overlay record is already cleared (PWA source of truth for Manual).
+  // Still fail hard if every HAP device rejected — matches setTemperature.
+  if (errors.length === deviceIds.length) {
+    throw new Error(errors[0] ?? "Clear overlay failed");
   }
 }
 
