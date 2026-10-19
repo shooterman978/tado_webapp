@@ -124,31 +124,6 @@ export function RoomDetail({
     }
   }, [zone.id, zone.targetTempC]);
 
-<<<<<<< HEAD
-  /** Disk-only sync stamps — opening a room must not hit Tado cloud. */
-  useEffect(() => {
-    let cancelled = false;
-    void fetchCloudSyncStatus()
-      .then((s) => {
-        if (cancelled) {
-          return;
-        }
-        setHomeSyncedAt(s.lastSyncedAt);
-        setScheduleSyncedAt(s.scheduleSyncedAt[zone.id] ?? null);
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setHomeSyncedAt(null);
-          setScheduleSyncedAt(null);
-        }
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [zone.id]);
-
-=======
->>>>>>> origin/cursor/room-overlay-footer-3c19
   useEffect(() => {
     if (
       zone.heatupHint?.recommendedStartAt &&
