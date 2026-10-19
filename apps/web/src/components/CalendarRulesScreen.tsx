@@ -1,13 +1,14 @@
 /**
- * Calendar rules editor — pattern → rooms/temp, next to Smart Schedule.
+ * Calendar rules editor — pattern / event-UID → rooms/temp.
  * Priority: CalendarOverride > Overlay > Cloud baseline (HAP overlay preferred).
  *
  * @package @heizplan/web
  */
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type {
   CalendarApplyPath,
+  CalendarEventPreview,
   CalendarMatchKind,
   CalendarRule,
   CalendarRuleMode,
@@ -20,7 +21,9 @@ import {
   createCalendarRule,
   deleteCalendarRule,
   evaluateCalendarRules,
+  fetchCalendarEvents,
   fetchCalendarStatus,
+  saveCalendarEventSelection,
   updateCalendarRule,
 } from "../api";
 import { CloudQuotaBadge } from "./CloudQuotaBadge";
@@ -31,7 +34,6 @@ interface CalendarRulesScreenProps {
   zones: Zone[];
   onBack: () => void;
   onQuotaChange?: (quota: CloudQuotaStatus) => void;
-  /** When opened from a room schedule, pre-select that room in new rules. */
   focusRoomId?: string | null;
 }
 
@@ -86,13 +88,24 @@ function toPayload(draft: Draft): Partial<CalendarRule> {
     match: { kind: draft.matchKind, value: draft.matchValue.trim() },
     roomIds: draft.roomIds,
     mode: draft.mode,
-    targetTempC:
-      draft.mode === "off"
-        ? null
-        : Number(draft.targetTempC),
+    targetTempC: draft.mode === "off" ? null : Number(draft.targetTempC),
     applyPath: draft.applyPath,
     priority: Number(draft.priority) || 100,
   };
+}
+
+function formatWhen(iso: string): string {
+  try {
+    return new Date(iso).toLocaleString("de-DE", {
+      weekday: "short",
+      day: "2-digit",
+      month: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  } catch {
+    return iso;
+  }
 }
 
 export function CalendarRulesScreen({
@@ -103,29 +116,96 @@ export function CalendarRulesScreen({
 }: CalendarRulesScreenProps) {
   const [status, setStatus] = useState<CalendarStatusResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
+  /** Only true during mutating actions — does NOT disable Neue Regel / Events prüfen. */
+  const [actionBusy, setActionBusy] = useState(false);
+  const [eventsBusy, setEventsBusy] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [draft, setDraft] = useState<Draft>(() => emptyDraft(focusRoomId));
   const [evalMsg, setEvalMsg] = useState<string | null>(null);
+  const [events, setEvents] = useState<CalendarEventPreview[]>([]);
+  const [selectedUids, setSelectedUids] = useState<string[]>([]);
+  const [eventsFetchedAt, setEventsFetchedAt] = useState<string | null>(null);
+  const [selectionHint, setSelectionHint] = useState<string | null>(null);
+  const onQuotaChangeRef = useRef(onQuotaChange);
+  onQuotaChangeRef.current = onQuotaChange;
 
-  const load = useCallback(async () => {
-    setBusy(true);
-    setError(null);
+  const refreshStatus = useCallback(async () => {
     try {
       const s = await fetchCalendarStatus();
       setStatus(s);
-      onQuotaChange?.(s.quota);
+      setSelectedUids(s.selectedUids ?? []);
+      onQuotaChangeRef.current?.(s.quota);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Kalenderstatus laden fehlgeschlagen");
-    } finally {
-      setBusy(false);
     }
-  }, [onQuotaChange]);
+  }, []);
 
   useEffect(() => {
-    void load();
-  }, [load]);
+    void refreshStatus();
+  }, [refreshStatus]);
+
+  const loadEvents = useCallback(async () => {
+    setEventsBusy(true);
+    setError(null);
+    try {
+      const res = await fetchCalendarEvents();
+      setEvents(res.events);
+      setSelectedUids(res.selectedUids);
+      setEventsFetchedAt(res.fetchedAt);
+      setSelectionHint(
+        res.selectionActive
+          ? `${res.selectedUids.length} Event(s) ausgewählt — nur diese werden ausgewertet.`
+          : "Keine Auswahl — Muster-Regeln gelten für alle geladenen Events.",
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Events laden fehlgeschlagen");
+    } finally {
+      setEventsBusy(false);
+    }
+  }, []);
+
+  async function persistSelection(next: string[]): Promise<void> {
+    setEventsBusy(true);
+    setError(null);
+    try {
+      const res = await saveCalendarEventSelection(next);
+      setEvents(res.events);
+      setSelectedUids(res.selectedUids);
+      setEventsFetchedAt(res.fetchedAt);
+      setSelectionHint(
+        res.selectionActive
+          ? `${res.selectedUids.length} Event(s) gespeichert — Evaluate nutzt nur diese.`
+          : "Auswahl geleert — wieder alle Events (Muster-Regeln).",
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Auswahl speichern fehlgeschlagen");
+    } finally {
+      setEventsBusy(false);
+    }
+  }
+
+  function toggleEventUid(uid: string): void {
+    const next = selectedUids.includes(uid)
+      ? selectedUids.filter((id) => id !== uid)
+      : [...selectedUids, uid];
+    void persistSelection(next);
+  }
+
+  function ruleFromEvent(ev: CalendarEventPreview): void {
+    setCreating(true);
+    setEditingId(null);
+    setDraft({
+      ...emptyDraft(focusRoomId),
+      name: ev.summary,
+      matchKind: "event_uid",
+      matchValue: ev.uid,
+      calendarId: ev.calendarId,
+    });
+    if (!selectedUids.includes(ev.uid)) {
+      void persistSelection([...selectedUids, ev.uid]);
+    }
+  }
 
   function toggleRoom(roomId: string): void {
     setDraft((d) => ({
@@ -137,7 +217,7 @@ export function CalendarRulesScreen({
   }
 
   async function saveDraft(): Promise<void> {
-    setBusy(true);
+    setActionBusy(true);
     setError(null);
     try {
       const payload = toPayload(draft);
@@ -149,16 +229,16 @@ export function CalendarRulesScreen({
       setCreating(false);
       setEditingId(null);
       setDraft(emptyDraft(focusRoomId));
-      await load();
+      await refreshStatus();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Regel speichern fehlgeschlagen");
     } finally {
-      setBusy(false);
+      setActionBusy(false);
     }
   }
 
   async function remove(id: string): Promise<void> {
-    setBusy(true);
+    setActionBusy(true);
     setError(null);
     try {
       await deleteCalendarRule(id);
@@ -166,36 +246,39 @@ export function CalendarRulesScreen({
         setEditingId(null);
         setCreating(false);
       }
-      await load();
+      await refreshStatus();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Löschen fehlgeschlagen");
     } finally {
-      setBusy(false);
+      setActionBusy(false);
     }
   }
 
   async function runEvaluate(): Promise<void> {
-    setBusy(true);
+    setActionBusy(true);
     setError(null);
     setEvalMsg(null);
     try {
       const result = await evaluateCalendarRules();
-      onQuotaChange?.(result.quota);
+      onQuotaChangeRef.current?.(result.quota);
       setEvalMsg(result.message);
-      await load();
+      await refreshStatus();
     } catch (err) {
       if (err instanceof ApiError && err.quota) {
-        onQuotaChange?.(err.quota);
+        onQuotaChangeRef.current?.(err.quota);
       }
       setError(err instanceof Error ? err.message : "Auswerten fehlgeschlagen");
     } finally {
-      setBusy(false);
+      setActionBusy(false);
     }
   }
 
   const rules = status?.rules ?? [];
   const active = status?.active ?? [];
   const calendars = status?.connection.calendars ?? [];
+  const configured = Boolean(status?.connection.configured);
+  /** Primary actions stay clickable during background refresh. */
+  const primaryDisabled = actionBusy;
 
   return (
     <div className="calendar-rules">
@@ -207,16 +290,91 @@ export function CalendarRulesScreen({
         <CloudQuotaBadge quota={status?.quota ?? null} compact />
       </header>
       <p className="schedule__note">
-        Event-Match überschreibt den Tado-Zeitplan (Priorität über Overlay &amp; Cloud-Baseline).
+        Events auswählen und/oder Muster-Regeln — überschreibt den Tado-Zeitplan (über Overlay &amp;
+        Cloud-Baseline).
       </p>
 
       <section className="calendar-rules__section">
         <h2 className="calendar-rules__h">iCloud / CalDAV</h2>
         <CalendarConnectionPanel
           onChanged={() => {
-            void load();
+            void refreshStatus();
           }}
         />
+      </section>
+
+      <section className="calendar-rules__section">
+        <div className="calendar-rules__row-head">
+          <h2 className="calendar-rules__h">Kommende Events</h2>
+          <button
+            type="button"
+            className="settings-quota-save"
+            disabled={eventsBusy || !configured}
+            onClick={() => void loadEvents()}
+          >
+            {eventsBusy ? "Laden…" : "Events laden"}
+          </button>
+        </div>
+        <p className="settings__hint">
+          Haken = Event wird bei „Events prüfen“ berücksichtigt. Ohne Haken gelten nur
+          Muster-Regeln auf alle Events. „Regel daraus“ bindet fest an die Event-UID.
+        </p>
+        {selectionHint ? (
+          <p className="settings-row__meta" role="status">
+            {selectionHint}
+          </p>
+        ) : null}
+        {eventsFetchedAt ? (
+          <p className="settings-row__meta">
+            Stand {new Date(eventsFetchedAt).toLocaleString("de-DE")}
+            {selectedUids.length > 0 ? ` · ${selectedUids.length} ausgewählt` : ""}
+          </p>
+        ) : (
+          <p className="settings-row__meta">Noch nicht geladen — „Events laden“ tippen.</p>
+        )}
+        {events.length > 0 ? (
+          <ul className="calendar-rules__list calendar-rules__events">
+            {events.map((ev) => {
+              const checked = selectedUids.includes(ev.uid);
+              return (
+                <li key={ev.uid} className="calendar-rules__card calendar-rules__event">
+                  <label className="calendar-rules__event-check">
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      disabled={eventsBusy}
+                      onChange={() => toggleEventUid(ev.uid)}
+                    />
+                    <span className="calendar-rules__event-body">
+                      <strong>{ev.summary}</strong>
+                      <span className="settings-row__meta">
+                        {formatWhen(ev.startsAt)} – {formatWhen(ev.endsAt)} · {ev.calendarName}
+                      </span>
+                    </span>
+                  </label>
+                  <button
+                    type="button"
+                    className="calendar-conn__secondary"
+                    disabled={actionBusy}
+                    onClick={() => ruleFromEvent(ev)}
+                  >
+                    Regel daraus
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        ) : null}
+        {selectedUids.length > 0 ? (
+          <button
+            type="button"
+            className="calendar-conn__secondary"
+            disabled={eventsBusy}
+            onClick={() => void persistSelection([])}
+          >
+            Auswahl leeren
+          </button>
+        ) : null}
       </section>
 
       <section className="calendar-rules__section">
@@ -225,7 +383,7 @@ export function CalendarRulesScreen({
           <button
             type="button"
             className="settings-quota-save"
-            disabled={busy}
+            disabled={primaryDisabled}
             onClick={() => {
               setCreating(true);
               setEditingId(null);
@@ -236,13 +394,14 @@ export function CalendarRulesScreen({
           </button>
         </div>
         <p className="settings__hint">
-          Priorität: <strong>Kalender</strong> &gt; manuelles Overlay &gt; Cloud-Zeitplan.
-          Standard: lokales HAP-Overlay (0 Cloud-Requests). Cloud-Writes nur wenn nötig und Quota
-          übrig.
+          Priorität: <strong>Kalender</strong> &gt; manuelles Overlay &gt; Cloud-Zeitplan. Standard:
+          HAP-Overlay (0 Cloud).
         </p>
 
         {rules.length === 0 && !creating ? (
-          <p className="settings-row__meta">Noch keine Regeln — z. B. Titel enthält „Büro“.</p>
+          <p className="settings-row__meta">
+            Noch keine Regeln — Event anhaken + „Regel daraus“, oder Muster „Büro“.
+          </p>
         ) : null}
 
         <ul className="calendar-rules__list">
@@ -251,7 +410,11 @@ export function CalendarRulesScreen({
               <div className="calendar-rules__card-main">
                 <strong>{rule.name}</strong>
                 <span className="settings-row__meta">
-                  {rule.enabled ? "an" : "aus"} · {rule.match.kind} „{rule.match.value}“ →{" "}
+                  {rule.enabled ? "an" : "aus"} · {rule.match.kind} „
+                  {rule.match.kind === "event_uid"
+                    ? `${rule.match.value.slice(0, 12)}…`
+                    : rule.match.value}
+                  “ →{" "}
                   {rule.roomIds
                     .map((id) => zones.find((z) => z.id === id)?.name ?? id)
                     .join(", ")}{" "}
@@ -265,7 +428,7 @@ export function CalendarRulesScreen({
               <div className="calendar-rules__card-actions">
                 <button
                   type="button"
-                  disabled={busy}
+                  disabled={actionBusy}
                   onClick={() => {
                     setEditingId(rule.id);
                     setCreating(true);
@@ -274,7 +437,7 @@ export function CalendarRulesScreen({
                 >
                   Bearbeiten
                 </button>
-                <button type="button" disabled={busy} onClick={() => void remove(rule.id)}>
+                <button type="button" disabled={actionBusy} onClick={() => void remove(rule.id)}>
                   Löschen
                 </button>
               </div>
@@ -313,15 +476,16 @@ export function CalendarRulesScreen({
                 <option value="title_contains">Titel enthält</option>
                 <option value="title_equals">Titel gleich</option>
                 <option value="title_regex">Titel Regex</option>
+                <option value="event_uid">Event-UID (Picker)</option>
               </select>
             </label>
             <label className="calendar-conn__field">
-              <span>Muster</span>
+              <span>{draft.matchKind === "event_uid" ? "Event-UID" : "Muster"}</span>
               <input
                 value={draft.matchValue}
                 onChange={(e) => setDraft({ ...draft, matchValue: e.target.value })}
                 required
-                placeholder="Büro"
+                placeholder={draft.matchKind === "event_uid" ? "UID aus Picker" : "Büro"}
               />
             </label>
             <label className="calendar-conn__field">
@@ -409,13 +573,13 @@ export function CalendarRulesScreen({
               />
             </label>
             <div className="calendar-conn__actions">
-              <button type="submit" className="settings-quota-save" disabled={busy}>
+              <button type="submit" className="settings-quota-save" disabled={actionBusy}>
                 Speichern
               </button>
               <button
                 type="button"
                 className="calendar-conn__secondary"
-                disabled={busy}
+                disabled={actionBusy}
                 onClick={() => {
                   setCreating(false);
                   setEditingId(null);
@@ -434,10 +598,10 @@ export function CalendarRulesScreen({
           <button
             type="button"
             className="settings-quota-save"
-            disabled={busy || !status?.connection.configured}
+            disabled={primaryDisabled || !configured}
             onClick={() => void runEvaluate()}
           >
-            Events prüfen
+            {actionBusy ? "Prüfe…" : "Events prüfen"}
           </button>
         </div>
         {evalMsg ? (

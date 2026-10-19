@@ -332,11 +332,13 @@ export interface CloudAuthPollResult {
  * (`remaining` / `resetsAt`) via schedule-service — never a second counter.
  */
 
-/** How a calendar event title is matched. */
+/** How a calendar event is matched. */
 export type CalendarMatchKind =
   | "title_contains"
   | "title_equals"
-  | "title_regex";
+  | "title_regex"
+  /** Exact CalDAV UID (from event picker). */
+  | "event_uid";
 
 /** Where the override is applied. */
 export type CalendarApplyPath = "hap_overlay" | "cloud_write";
@@ -442,11 +444,38 @@ export interface CalendarEvaluateResult {
   message: string;
 }
 
+/** Upcoming CalDAV event for the PWA picker (no secrets). */
+export interface CalendarEventPreview {
+  uid: string;
+  summary: string;
+  startsAt: string;
+  endsAt: string;
+  calendarId: string;
+  calendarName: string;
+  /** True when this UID is in the persisted selection. */
+  selected: boolean;
+}
+
+export interface CalendarEventsResponse {
+  events: CalendarEventPreview[];
+  /** UIDs Jonas marked as “berücksichtigen”. Empty = all events (pattern-only). */
+  selectedUids: string[];
+  fetchedAt: string;
+  /** When true, evaluate only considers selected UIDs. */
+  selectionActive: boolean;
+}
+
+export interface CalendarEventSelectionUpdate {
+  selectedUids: string[];
+}
+
 export interface CalendarStatusResponse {
   connection: CalendarConnectionStatus;
   rules: CalendarRule[];
   active: CalendarActiveOverride[];
   quota: CloudQuotaStatus;
+  /** Persisted event UIDs to consider (may be empty). */
+  selectedUids: string[];
 }
 
 export interface HeatupLearningHook {

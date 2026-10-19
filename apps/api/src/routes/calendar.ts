@@ -15,9 +15,11 @@ import {
   getCalendarStatus,
   getConnectionStatus,
   listRules,
+  listUpcomingEvents,
   refreshCalendarList,
   removeRule,
   updateConnection,
+  updateEventSelection,
   updateRule,
 } from "../modules/calendar/service.js";
 
@@ -101,6 +103,44 @@ calendarRoutes.delete("/rules/:id", async (c) => {
     return c.json({ error: "not_found", message: `Rule not found: ${id}` }, 404);
   }
   return c.json({ ok: true, id });
+});
+
+/** Upcoming events for the picker (no override apply). */
+calendarRoutes.get("/events", async (c) => {
+  try {
+    return c.json(await listUpcomingEvents());
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Events fetch failed";
+    if (message.includes("not configured")) {
+      return c.json({ error: "caldav_not_configured", message }, 409);
+    }
+    return c.json(
+      { error: "events_failed", message },
+      err instanceof CalDavError ? 502 : 502,
+    );
+  }
+});
+
+/** Persist which event UIDs Jonas wants evaluate to consider. */
+calendarRoutes.put("/events/selection", async (c) => {
+  try {
+    const body = (await c.req.json().catch(() => ({}))) as {
+      selectedUids?: string[];
+    };
+    if (!Array.isArray(body.selectedUids)) {
+      return c.json(
+        { error: "invalid_body", message: "selectedUids (string[]) required" },
+        400,
+      );
+    }
+    return c.json(await updateEventSelection(body.selectedUids.map(String)));
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Selection save failed";
+    if (message.includes("not configured")) {
+      return c.json({ error: "caldav_not_configured", message }, 409);
+    }
+    return c.json({ error: "selection_failed", message }, 502);
+  }
 });
 
 /** Fetch CalDAV + apply CalendarOverride (HAP preferred, quota-aware). */

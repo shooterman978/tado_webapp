@@ -2,6 +2,7 @@ import type {
   CalendarConnectionStatus,
   CalendarConnectionUpdate,
   CalendarEvaluateResult,
+  CalendarEventsResponse,
   CalendarRule,
   CalendarStatusResponse,
   CloudAuthPollResult,
@@ -315,4 +316,16 @@ export async function deleteCalendarRule(id: string): Promise<void> {
 
 export function evaluateCalendarRules(): Promise<CalendarEvaluateResult> {
   return postJsonResult<CalendarEvaluateResult>("/api/calendar/evaluate");
+}
+
+export function fetchCalendarEvents(): Promise<CalendarEventsResponse> {
+  return getJson<CalendarEventsResponse>("/api/calendar/events");
+}
+
+export function saveCalendarEventSelection(
+  selectedUids: string[],
+): Promise<CalendarEventsResponse> {
+  return putJson<CalendarEventsResponse>("/api/calendar/events/selection", {
+    selectedUids,
+  });
 }

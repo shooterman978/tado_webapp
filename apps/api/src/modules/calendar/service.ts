@@ -8,6 +8,7 @@ import type {
   CalendarConnectionStatus,
   CalendarConnectionUpdate,
   CalendarEvaluateResult,
+  CalendarEventsResponse,
   CalendarRule,
   CalendarStatusResponse,
 } from "@heizplan/shared";
@@ -26,8 +27,10 @@ import {
   loadCalendarCredentials,
   loadCalendarMeta,
   loadCalendarRules,
+  loadSelectedEventUids,
   saveCalendarCredentials,
   saveCalendarMeta,
+  saveSelectedEventUids,
   upsertCalendarRule,
   type CalendarCredentials,
 } from "./store.js";
@@ -161,13 +164,14 @@ export async function removeRule(id: string): Promise<boolean> {
 }
 
 export async function getCalendarStatus(): Promise<CalendarStatusResponse> {
-  const [connection, rules, active, quota] = await Promise.all([
+  const [connection, rules, active, quota, selectedUids] = await Promise.all([
     getConnectionStatus(),
     listRules(),
     loadActiveOverrides(dataDir()),
     getCloudQuota(),
+    loadSelectedEventUids(dataDir()),
   ]);
-  return { connection, rules, active, quota };
+  return { connection, rules, active, quota, selectedUids };
 }
 
 async function requireCreds(): Promise<CalendarCredentials> {
@@ -240,4 +244,65 @@ export async function refreshCalendarList(): Promise<CalendarConnectionStatus> {
     throw err;
   }
   return getConnectionStatus();
+}
+
+async function resolveCalendars(
+  creds: CalendarCredentials,
+): Promise<Awaited<ReturnType<typeof discoverCalendars>>> {
+  const meta = await loadCalendarMeta(dataDir());
+  if (meta.calendars.length > 0) {
+    return meta.calendars;
+  }
+  const calendars = await discoverCalendars(creds);
+  await saveCalendarMeta(dataDir(), {
+    lastOkAt: new Date().toISOString(),
+    lastError: null,
+    calendars,
+  });
+  return calendars;
+}
+
+/**
+ * List upcoming events for the picker (no override apply).
+ * Window: now−15m … +48h.
+ */
+export async function listUpcomingEvents(
+  opts?: { hoursAhead?: number },
+): Promise<CalendarEventsResponse> {
+  const creds = await requireCreds();
+  const calendars = await resolveCalendars(creds);
+  const hours = opts?.hoursAhead ?? 48;
+  const from = new Date(Date.now() - 15 * 60_000);
+  const to = new Date(Date.now() + hours * 3_600_000);
+  const raw = await fetchEvents(creds, calendars, from, to);
+  const selectedUids = await loadSelectedEventUids(dataDir());
+  const selected = new Set(selectedUids);
+  const nameById = new Map(calendars.map((c) => [c.id, c.displayName]));
+  await saveCalendarMeta(dataDir(), {
+    lastOkAt: new Date().toISOString(),
+    lastError: null,
+    calendars,
+  });
+  return {
+    events: raw.map((e) => ({
+      uid: e.uid,
+      summary: e.summary,
+      startsAt: e.startsAt,
+      endsAt: e.endsAt,
+      calendarId: e.calendarId,
+      calendarName: nameById.get(e.calendarId) ?? e.calendarId,
+      selected: selected.has(e.uid),
+    })),
+    selectedUids,
+    fetchedAt: new Date().toISOString(),
+    selectionActive: selectedUids.length > 0,
+  };
+}
+
+export async function updateEventSelection(
+  selectedUids: string[],
+): Promise<CalendarEventsResponse> {
+  await saveSelectedEventUids(dataDir(), selectedUids);
+  // Re-list so the picker reflects persisted flags (CalDAV may be slow — reuse last fetch window).
+  return listUpcomingEvents();
 }

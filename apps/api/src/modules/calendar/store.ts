@@ -21,6 +21,7 @@ const CRED_FILE = "calendar-credentials.json";
 const RULES_FILE = "calendar-rules.json";
 const ACTIVE_FILE = "calendar-active.json";
 const META_FILE = "calendar-meta.json";
+const SELECTED_FILE = "calendar-selected-events.json";
 
 export interface CalendarCredentials {
   url: string;
@@ -43,6 +44,11 @@ interface RulesFile {
 
 interface ActiveFile {
   overrides: CalendarActiveOverride[];
+}
+
+interface SelectedFile {
+  selectedUids: string[];
+  updatedAt: string;
 }
 
 async function ensureDir(dataDir: string): Promise<void> {
@@ -138,7 +144,11 @@ export async function saveCalendarMeta(
 }
 
 function normaliseMatchKind(kind: unknown): CalendarMatchKind {
-  if (kind === "title_equals" || kind === "title_regex") {
+  if (
+    kind === "title_equals" ||
+    kind === "title_regex" ||
+    kind === "event_uid"
+  ) {
     return kind;
   }
   return "title_contains";
@@ -282,4 +292,26 @@ export async function saveActiveOverrides(
     overrides,
   } satisfies ActiveFile);
   return overrides;
+}
+
+export async function loadSelectedEventUids(
+  dataDir: string,
+): Promise<string[]> {
+  const file = await readJson<SelectedFile>(path.join(dataDir, SELECTED_FILE));
+  if (!file?.selectedUids || !Array.isArray(file.selectedUids)) {
+    return [];
+  }
+  return [...new Set(file.selectedUids.map(String).filter(Boolean))];
+}
+
+export async function saveSelectedEventUids(
+  dataDir: string,
+  selectedUids: string[],
+): Promise<string[]> {
+  const next = [...new Set(selectedUids.map(String).filter(Boolean))];
+  await writeJson(path.join(dataDir, SELECTED_FILE), {
+    selectedUids: next,
+    updatedAt: new Date().toISOString(),
+  } satisfies SelectedFile);
+  return next;
 }

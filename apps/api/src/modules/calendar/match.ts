@@ -17,6 +17,8 @@ export function eventMatchesRule(event: CalDavEvent, rule: CalendarRule): boolea
   const title = event.summary ?? "";
   const value = rule.match.value;
   switch (rule.match.kind) {
+    case "event_uid":
+      return event.uid === value;
     case "title_equals":
       return title.toLocaleLowerCase() === value.toLocaleLowerCase();
     case "title_regex": {
@@ -30,6 +32,21 @@ export function eventMatchesRule(event: CalDavEvent, rule: CalendarRule): boolea
     default:
       return title.toLocaleLowerCase().includes(value.toLocaleLowerCase());
   }
+}
+
+/**
+ * When Jonas marked events in the picker, only those UIDs are candidates.
+ * Empty selection → all fetched events (pattern rules still apply).
+ */
+export function filterEventsBySelection(
+  events: CalDavEvent[],
+  selectedUids: string[],
+): CalDavEvent[] {
+  if (selectedUids.length === 0) {
+    return events;
+  }
+  const set = new Set(selectedUids);
+  return events.filter((e) => set.has(e.uid));
 }
 
 export function isEventActiveAt(event: CalDavEvent, at: Date): boolean {
@@ -50,9 +67,11 @@ export function selectActiveMatches(
   events: CalDavEvent[],
   rules: CalendarRule[],
   at = new Date(),
+  selectedUids: string[] = [],
 ): Map<string, RuleMatch> {
   const enabled = rules.filter((r) => r.enabled).sort((a, b) => b.priority - a.priority);
-  const activeEvents = events.filter((e) => isEventActiveAt(e, at));
+  const scoped = filterEventsBySelection(events, selectedUids);
+  const activeEvents = scoped.filter((e) => isEventActiveAt(e, at));
   const byRoom = new Map<string, RuleMatch>();
 
   for (const rule of enabled) {

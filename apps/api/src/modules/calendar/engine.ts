@@ -21,6 +21,7 @@ import type { CalDavEvent } from "./caldav.js";
 import { selectActiveMatches } from "./match.js";
 import {
   loadActiveOverrides,
+  loadSelectedEventUids,
   saveActiveOverrides,
 } from "./store.js";
 
@@ -69,7 +70,8 @@ export async function reconcileOverrides(
   rules: CalendarRule[],
   at = new Date(),
 ): Promise<CalendarEvaluateResult> {
-  const desired = selectActiveMatches(events, rules, at);
+  const selectedUids = await loadSelectedEventUids(dataDir());
+  const desired = selectActiveMatches(events, rules, at, selectedUids);
   const previous = await loadActiveOverrides(dataDir());
   const quota = await getCloudQuota();
 

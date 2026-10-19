@@ -11,6 +11,7 @@ import type { CalDavEvent } from "./caldav.js";
 import { parseIcalDate, parseVEvents } from "./caldav.js";
 import {
   eventMatchesRule,
+  filterEventsBySelection,
   isEventActiveAt,
   selectActiveMatches,
 } from "./match.js";
@@ -124,6 +125,34 @@ function main(): void {
   assert.equal(parsed.length, 1);
   assert.equal(parsed[0].summary, "Büro");
   assert.equal(parsed[0].uid, "abc-1");
+
+  assert.equal(
+    eventMatchesRule(event({ uid: "uid-9", summary: "X" }), rule({
+      match: { kind: "event_uid", value: "uid-9" },
+    })),
+    true,
+  );
+  assert.equal(
+    eventMatchesRule(event({ uid: "uid-9" }), rule({
+      match: { kind: "event_uid", value: "other" },
+    })),
+    false,
+  );
+
+  const all = [
+    event({ uid: "a", summary: "A" }),
+    event({ uid: "b", summary: "B" }),
+  ];
+  assert.equal(filterEventsBySelection(all, []).length, 2);
+  assert.equal(filterEventsBySelection(all, ["b"]).map((e) => e.uid).join(","), "b");
+
+  const scoped = selectActiveMatches(
+    all,
+    [rule({ id: "r", matchValue: "A", priority: 1 })],
+    at,
+    ["b"],
+  );
+  assert.equal(scoped.size, 0, "selection filters out pattern match on A");
 
   console.log("calendar match helpers ok");
 }

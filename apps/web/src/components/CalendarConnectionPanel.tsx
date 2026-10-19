@@ -5,7 +5,7 @@
  * @package @heizplan/web
  */
 
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { CalendarConnectionStatus } from "@heizplan/shared";
 import {
   deleteCalendarConnection,
@@ -15,6 +15,7 @@ import {
 } from "../api";
 
 interface CalendarConnectionPanelProps {
+  /** Fired only after user-driven save/refresh/disconnect — not on mount. */
   onChanged?: (status: CalendarConnectionStatus) => void;
 }
 
@@ -26,28 +27,46 @@ export function CalendarConnectionPanel({ onChanged }: CalendarConnectionPanelPr
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [info, setInfo] = useState<string | null>(null);
-
-  const apply = useCallback(
-    (s: CalendarConnectionStatus) => {
-      setStatus(s);
-      if (s.url) {
-        setUrl(s.url);
-      }
-      if (s.username) {
-        setUsername(s.username);
-      }
-      onChanged?.(s);
-    },
-    [onChanged],
-  );
+  const onChangedRef = useRef(onChanged);
+  onChangedRef.current = onChanged;
 
   useEffect(() => {
+    let cancelled = false;
     void fetchCalendarConnection()
-      .then(apply)
+      .then((s) => {
+        if (cancelled) {
+          return;
+        }
+        setStatus(s);
+        if (s.url) {
+          setUrl(s.url);
+        }
+        if (s.username) {
+          setUsername(s.username);
+        }
+      })
       .catch((err: unknown) => {
-        setError(err instanceof Error ? err.message : "CalDAV-Status laden fehlgeschlagen");
+        if (!cancelled) {
+          setError(
+            err instanceof Error ? err.message : "CalDAV-Status laden fehlgeschlagen",
+          );
+        }
       });
-  }, [apply]);
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  function applyUserChange(s: CalendarConnectionStatus): void {
+    setStatus(s);
+    if (s.url) {
+      setUrl(s.url);
+    }
+    if (s.username) {
+      setUsername(s.username);
+    }
+    onChangedRef.current?.(s);
+  }
 
   async function save(): Promise<void> {
     setBusy(true);
@@ -60,7 +79,7 @@ export function CalendarConnectionPanel({ onChanged }: CalendarConnectionPanelPr
         appPassword: password.trim() || undefined,
       });
       setPassword("");
-      apply(next);
+      applyUserChange(next);
       setInfo(
         next.calendars.length > 0
           ? `${next.calendars.length} Kalender gefunden.`
@@ -77,7 +96,7 @@ export function CalendarConnectionPanel({ onChanged }: CalendarConnectionPanelPr
     setBusy(true);
     setError(null);
     try {
-      apply(await refreshCalendarConnection());
+      applyUserChange(await refreshCalendarConnection());
       setInfo("Kalenderliste aktualisiert.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Aktualisieren fehlgeschlagen");
@@ -90,7 +109,7 @@ export function CalendarConnectionPanel({ onChanged }: CalendarConnectionPanelPr
     setBusy(true);
     setError(null);
     try {
-      apply(await deleteCalendarConnection());
+      applyUserChange(await deleteCalendarConnection());
       setPassword("");
       setInfo("CalDAV-Zugang entfernt.");
     } catch (err) {
