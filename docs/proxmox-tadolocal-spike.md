@@ -1,7 +1,7 @@
 # Spike: TadoLocal auf Proxmox (LXC) — ausführliche Anleitung
 
 **Für:** Jonas Rehkopf  
-**Proxmox:** typisch **VE 8.x** (Bezeichnungen unten; bei 7/9 können Labels leicht abweichen)  
+**Proxmox:** **VE 8.x / 9.x** (UI-Labels können leicht abweichen; Weg A gilt für beide)  
 **Ziel:** TadoLocal läuft im Homelab, pairt die **freie** HomeKit-V3-Bridge, `GET /zones` liefert Daten.  
 **Nicht in diesem Spike:** Home Assistant anbinden, PWA/App, Secrets ins Git.
 
@@ -18,7 +18,7 @@
 1. [Vor dem Start](#1-vor-dem-start-checkliste--wo-finde-ich-ip-und-pin)
 2. [Wegwahl & Warnungen](#2-wegwahl--warnungen) (Nesting ausgegraut = normal; **Weg A Default**)
 3. [CT in der Proxmox-Web-UI anlegen (Weg A)](#3-ct-in-der-proxmox-web-ui-anlegen-weg-a)
-4. [Features nesting/keyctl (Weg A)](#4-features-nestingkeyctl-setzen-weg-a--gui) · [Weg B privileged](#4b-weg-b--privileged-ct-alternative-nesting-per-cli)
+4. [Features Nesting (+ optional keyctl)](#4-features-nesting--optional-keyctl-setzen-weg-a--gui) · [Weg B](#4b-weg-b--privileged-ct-alternative-nesting-per-cli)
 5. [CT starten und Konsole öffnen](#5-ct-starten-und-konsole-öffnen)
 6. [Spike-Dateien ins CT kopieren](#6-spike-dateien-ins-ct-kopieren)
 7. [Docker installieren](#7-docker-installieren)
@@ -53,13 +53,20 @@
 3. Vom Laptop im gleichen LAN: Geräte-Scan oder Router-DHCP-Historie.
 4. Merke die IP, z. B. `192.168.178.55` — kommt in `.env` als `TADO_BRIDGE_IP`.
 
-### Wo finde ich den HomeKit-PIN?
+### HomeKit-PIN vs. 4-stelliger Auth-Code (wichtig!)
 
-- Auf dem **Aufkleber der Tado Internet Bridge** (Gerät selbst, oft Unterseite/Rückseite).
-- Format: **`XXX-XX-XXX`** (acht Ziffern mit Bindestrichen), z. B. `123-45-678`.
-- Das ist **nicht** dein Tado-Cloud-Passwort und **nicht** der Apple-Home-Code von einem anderen Gerät.
+TadoLocal (aiohomekit) braucht den **HomeKit Setup-Code** der Bridge — **acht Ziffern** im Format **`XXX-XX-XXX`**.
 
-**Wichtig:** PIN und `.env` **niemals** committen oder in Screenshots/Chat posten.
+| Code | Wo | Für TadoLocal? |
+|---|---|---|
+| **HomeKit Setup-Code** `XXX-XX-XXX` (8 Ziffern) | Aufkleber **seitlich/am Gehäuse** der Internet Bridge (HomeKit-/Haus-Symbol) | **Ja — das in `.env` als `TADO_BRIDGE_PIN`** |
+| **4-stelliger Auth-/Geräte-Code** | Oft in der Tado-App oder beim Pairen von Thermostaten an die Bridge | **Nein** — kein HomeKit-PIN; Pairing damit schlägt fehl |
+| Tado-Cloud-Passwort / Apple-ID | Account | **Nein** |
+
+**Praxis:** Am Bridge-Gehäuse den Aufkleber mit dem **achtstelligen** Code suchen (nicht den kurzen 4-steller). Tado Support: HomeKit-Code ist seitlich auf der Bridge; lässt sich **nicht** neu erzeugen — Aufkleber/Foto aufbewahren.
+
+- Ohne 8-stelligen Code: **kein** Pairing über `.env` und auch keine „UI-Pairing ohne PIN“-Abkürzung in TadoLocal 1.1.2 — die UI macht Cloud-Auth, das HomeKit-Pairing braucht `--pin` / `TADO_BRIDGE_PIN` beim ersten Start.
+- PIN und `.env` **niemals** committen oder in Screenshots/Chat posten.
 
 ---
 
@@ -69,7 +76,7 @@
 
 ```
 Proxmox-Host
-  └── LXC „tadolocal“  ← Default: unprivileged + nesting + keyctl (Weg A)
+  └── LXC „tadolocal“  ← Default: unprivileged + nesting (+ keyctl falls vorhanden)
         └── Docker + Compose
               └── Container tado-local (network_mode: host)
                     └── Port 4407 → REST/UI
@@ -83,7 +90,7 @@ Proxmox-Host
 In der Proxmox-8-UI ist die Checkbox **Nesting** bei einem **privileged** CT oft **ausgegraut / nicht wählbar**. Das ist **normal**, kein Fehler deiner Installation.
 
 - **Privileged** = der CT läuft bereits mit erweiterten Rechten; Nesting ist in der GUI dann oft nicht separat schaltbar (teilweise redundant bzw. nur per CLI setzbar).
-- **Unprivileged** = Nesting und keyctl sind in der GUI **aktiv wählbar** — genau das braucht Docker-in-LXC als Standardpfad.
+- **Unprivileged** = Nesting (und ggf. keyctl) sind in der GUI **aktiv wählbar** — Nesting ist der wichtige Schalter für Docker-in-LXC.
 
 Deshalb führt diese Anleitung dich **nicht** in die Sackgasse „Unprivileged aus + Nesting anhaken“.
 
@@ -92,7 +99,7 @@ Deshalb führt diese Anleitung dich **nicht** in die Sackgasse „Unprivileged a
 | | **Weg A — empfohlen für Spike** | Weg B — Alternative |
 |---|---|---|
 | Unprivileged | **an** | aus (privileged) |
-| Nesting / keyctl | In der **GUI** unter Features: **beide an** | GUI oft ausgegraut → auf dem **Proxmox-Host** per `pct set` |
+| Nesting / keyctl | **Nesting an**; keyctl an **falls** in der UI sichtbar (Proxmox 9: oft **kein** keyctl — ok) | Nesting GUI oft ausgegraut → Host: `pct set … -features nesting=1` |
 | Docker-in-LXC | Proxmox-8-Standard | Funktioniert, mehr Host-Eingriff |
 | Compose-Netz | weiter `network_mode: host` | ebenfalls `host` |
 | HomeKit / mDNS | CT + Bridge gleiches LAN; feste Bridge-IP in `.env`; host-Netz teilt LXC-Stack — mDNS meist unkritisch, weil wir per IP pairen | oft etwas „freier“, aber GUI-Fallstrick Nesting |
@@ -118,7 +125,7 @@ Deshalb führt diese Anleitung dich **nicht** in die Sackgasse „Unprivileged a
 
 Öffne die Proxmox-Web-UI: `https://<dein-proxmox>:8006` und melde dich an.
 
-**Ziel dieses Abschnitts:** Unprivileged-CT mit Nesting + keyctl — Nesting-Checkbox ist **bedienbar**.
+**Ziel dieses Abschnitts:** Unprivileged-CT mit **Nesting** (keyctl optional, siehe §4) — Nesting-Checkbox ist **bedienbar**.
 
 ### 3.0 Template vorbereiten (falls noch keins da)
 
@@ -242,22 +249,30 @@ DNS muss funktionieren — Compose baut von GitHub (`github.com`).
 
 Der neue CT erscheint links unter dem Node (Icon Container, ID z. B. `120`).
 
-**Als Nächstes Pflicht:** Features **nesting** + **keyctl** setzen (§4) — auch wenn Nesting schon im Wizard an war, keyctl oft erst unter Options.
+**Als Nächstes Pflicht:** Feature **Nesting** setzen (§4). **keyctl** nur, wenn die UI es anbietet.
 
 ---
 
-## 4. Features nesting/keyctl setzen (Weg A — GUI)
+## 4. Features Nesting (+ optional keyctl) setzen (Weg A — GUI)
 
-Docker-in-LXC braucht typischerweise **Nesting** und **keyctl**. Bei Weg A (unprivileged) sind beide in der GUI schaltbar.
+Docker-in-LXC braucht vor allem **Nesting**. Bei Weg A (unprivileged) ist Nesting in der GUI schaltbar.
 
-### In der GUI (Proxmox 8)
+### keyctl auf Proxmox 9
+
+Auf **Proxmox 9** fehlt **keyctl** in der Features-UI oft komplett. Das ist **kein Blocker**, wenn Docker danach startet und läuft (Jonas’ Fall).  
+
+- **Pflicht:** Nesting **an**
+- **Optional:** keyctl, falls sichtbar (Proxmox 8) oder per CLI, falls das Feature am Host noch existiert (siehe unten)
+- Installation ohne keyctl fortsetzen — nicht warten oder abbrechen
+
+### In der GUI (Proxmox 8/9)
 
 1. Links den CT **`tadolocal`** (z. B. ID 120) anklicken.
 2. Menü: **Options** (deutsch: **Optionen**).
 3. Zeile **Features** doppelklicken (oder Select → **Edit**).
 4. Aktivieren:
-   - **Nesting**
-   - **keyctl** (manchmal als „Keyctl“ / unter erweiterten Features)
+   - **Nesting** (Pflicht)
+   - **keyctl** — nur wenn die Checkbox existiert
 5. **OK** speichern.
 6. CT **neu starten**, falls Features nicht hot greifen:
    - CT → **Shutdown** / **Stop**, dann **Start**  
@@ -265,9 +280,22 @@ Docker-in-LXC braucht typischerweise **Nesting** und **keyctl**. Bei Weg A (unpr
 
 ### Kontrolle
 
-Unter **Options** sollte bei Features etwas wie `nesting=1;keyctl=1` stehen (Formulierung je nach UI-Sprache).
+Unter **Options** sollte mindestens `nesting=1` stehen. `keyctl=1` ist nice-to-have, kein Muss auf PVE 9.
 
 Wenn Nesting **ausgegraut** ist: Du hast sehr wahrscheinlich einen **privileged** CT. Entweder CT neu mit Weg A anlegen, oder Weg B (§4b) nutzen — nicht an der ausgegrauten Checkbox festbeißen.
+
+### Optional: keyctl per CLI (nur wenn Feature noch existiert)
+
+Auf dem **Proxmox-Host**:
+
+```bash
+CTID=120
+pct set $CTID --features nesting=1,keyctl=1
+# Wenn keyctl unbekannt/Fehler: nur nesting:
+pct set $CTID --features nesting=1
+```
+
+Fehler „unknown feature keyctl“ o. Ä. → ignorieren, mit Nesting allein weiter.
 
 ---
 
@@ -282,13 +310,13 @@ Nur wenn du bewusst privileged willst oder Weg A bei Docker scheitert.
 ```bash
 CTID=120   # deine ID
 pct stop $CTID
-pct set $CTID --features nesting=1,keyctl=1
+pct set $CTID --features nesting=1,keyctl=1   # keyctl weglassen wenn Host es nicht kennt
 # Config prüfen:
 grep -E 'unprivileged|features' /etc/pve/lxc/${CTID}.conf
 pct start $CTID
 ```
 
-4. Hinweis: Bei privileged ist `nesting` teils redundant (Root im CT ist ohnehin mächtig); `pct set … features` setzt die Flags trotzdem zuverlässig, ohne GUI.
+4. Hinweis: Bei privileged ist `nesting` teils redundant; `pct set` umgeht die ausgegraute GUI. keyctl auf PVE 9 oft entbehrlich.
 5. Danach Docker/Compose wie ab §7 — gleiche `.env`, gleiches `network_mode: host`.
 
 **CLI-Only-Create für Weg B** steht im Anhang (§15A).
@@ -394,6 +422,7 @@ Erwartung: Versionsnummern + `active`.
 
 ```bash
 cd /opt/tadolocal/deploy/tadolocal
+# Falls du noch eine alte Kopie hast: Branch pullen oder Dateien neu klonen (§6)
 cp .env.example .env
 nano .env
 ```
@@ -407,10 +436,41 @@ TADO_PORT=4407
 ```
 
 - Keine Anführungszeichen nötig.
-- PIN exakt im Format `XXX-XX-XXX`.
+- **PIN = 8-stelliger HomeKit-Code** `XXX-XX-XXX` — **nicht** der 4-stellige Auth-Code (§1).
 - `TADO_API_KEYS` für den Spike leer lassen.
 
 Speichern in nano: `Ctrl+O`, Enter, `Ctrl+X`.
+
+### DB-Permissions (Compose ab Spike-Fix)
+
+Upstream-Image läuft als User `tado` (uid **1000**). Docker-Named-Volumes gehören default **root** → Fehler:
+
+`unable to open database file` / `Database migration check failed`
+
+Unser `docker-compose.yml` setzt deshalb **`user: "0:0"`**, damit `/data/tado-local.db` geschrieben werden kann. Nach Pull der aktuellen Spike-Dateien:
+
+```bash
+cd /opt/tadolocal/deploy/tadolocal
+git pull   # oder Dateien neu kopieren
+grep user docker-compose.yml   # erwartet: user: "0:0"
+docker compose up -d --build --force-recreate
+docker compose logs --tail=50
+```
+
+Sofort-Fix **ohne** neuen Compose-Pull (nur Volume chown, dann recreate):
+
+```bash
+cd /opt/tadolocal/deploy/tadolocal
+docker compose stop
+docker run --rm -v tadolocal-data:/data alpine:3.20 chown -R 1000:1000 /data
+# Wenn compose noch KEIN user: "0:0" hat, trotzdem chown hilft bei USER tado:
+docker compose up -d --force-recreate
+# Oder explizit root (entspricht aktuellem Compose):
+# docker compose run würde user aus yaml nehmen — lieber yaml aktualisieren
+docker compose logs --tail=80
+```
+
+Erwartung in den Logs: **kein** `unable to open database file`; Prozess startet (Pairing/Cloud ggf. noch offen).
 
 Stack bauen und starten (braucht Internet — lädt Upstream Tag `1.1.2`):
 
@@ -576,13 +636,16 @@ docker volume ls | grep tado
 | Symptom | Was tun |
 |---|---|
 | **Wizard: kein Template** | Node → Storage `local` → CT Templates → Template downloaden (§3.0). |
-| **Nesting ausgegraut** | CT ist privileged → normal. **Weg A:** neu mit Unprivileged **an**. **Weg B:** `pct set <ID> --features nesting=1,keyctl=1` auf dem Host (§4b). |
-| **Docker startet nicht** | Options → Features: nesting + keyctl (Weg A)? `journalctl -u docker -e`. CT neu starten. AppArmor/cgroup-Meldungen → Logs; ggf. Weg B testen. |
+| **Nesting ausgegraut** | CT ist privileged → normal. **Weg A:** neu mit Unprivileged **an**. **Weg B:** `pct set <ID> --features nesting=1` auf dem Host (§4b). |
+| **keyctl fehlt (Proxmox 9)** | Normal. Nesting reicht oft. Nicht blockieren, wenn Docker läuft (§4). |
+| **`unable to open database file`** | Volume-Permissions: Compose mit `user: "0:0"` pullen **oder** `chown 1000:1000` auf Volume (§8). Dann `--force-recreate`. |
+| **Docker startet nicht** | Options → Features: **nesting**? `journalctl -u docker -e`. CT neu starten. Ggf. Weg B. |
 | **Compose-Build / GitHub fail** | DNS im CT, `ping github.com`, Uhrzeit/NTP; Internetzugang. |
 | **UI nicht erreichbar** | `ss -tlnp \| grep 4407`, `docker compose ps`, Firewall Datacenter/Node/CT (§9). |
 | **Bridge nicht gefunden / kein Ping** | Gleiche Bridge `vmbr0`/VLAN? IP stimmt? Router-Isolation? Host-Netz in Compose aktiv? |
 | **Slot belegt / Pairing fails** | Apple Home? HA HomeKit? Anderen Controller entfernen. Notfalls Bridge-Reset: kleine Reset-Taste hinten **≥ 10 Sekunden**, LED blinkt — danach alles neu pairen. |
-| **Falsche PIN** | Aufkleber nochmal lesen; Format `XXX-XX-XXX`; nach Korrektur `--force-recreate`. |
+| **Nur 4-stelliger Code** | Das ist **nicht** der HomeKit-PIN. 8-steller `XXX-XX-XXX` am Bridge-Aufkleber suchen (§1). |
+| **Falsche PIN** | HomeKit-Aufkleber (8 Ziffern); nach Korrektur `--force-recreate`. |
 | **Cloud-Auth hängt** | Auth im Browser wiederholen; `docker compose restart`; Hard-Refresh. |
 | **`/zones` leer** | Pairing + Cloud fertig? Logs; `/status` und UI prüfen. |
 | **Pairing nach Recreate weg** | Volume gelöscht (`down -v`)? Nicht löschen; Backup von `tadolocal-data` erwägen. |
@@ -620,7 +683,7 @@ ss -tlnp | grep 4407
 
 IDs/Storage/Template anpassen.
 
-**Weg A (Default) — unprivileged + nesting + keyctl:**
+**Weg A (Default) — unprivileged + nesting** (keyctl optional):
 
 ```bash
 CTID=120
@@ -636,9 +699,10 @@ pct create $CTID $TEMPLATE \
   --rootfs ${STORAGE}:16 \
   --net0 name=eth0,bridge=${BRIDGE},ip=dhcp \
   --unprivileged 1 \
-  --features nesting=1,keyctl=1 \
+  --features nesting=1 \
   --onboot 1 \
   --start 1
+# optional: --features nesting=1,keyctl=1  falls Host keyctl kennt
 
 pct enter $CTID
 ```
@@ -652,7 +716,7 @@ pct create $CTID $TEMPLATE \
   --rootfs ${STORAGE}:16 \
   --net0 name=eth0,bridge=${BRIDGE},ip=dhcp \
   --unprivileged 0 \
-  --features nesting=1,keyctl=1 \
+  --features nesting=1 \
   --onboot 1 --start 1
 ```
 
@@ -669,9 +733,9 @@ pct create $CTID $TEMPLATE \
 
 ## Kurz: Was du am Ende erledigt haben solltest
 
-1. **Weg A:** Unprivileged CT mit nesting/keyctl an `vmbr0` (oder deinem LAN).  
-2. Spike-Dateien unter `/opt/tadolocal/deploy/tadolocal`.  
-3. Docker + `docker compose up -d --build` (`network_mode: host`).  
-4. UI `:4407` → HomeKit pairen → Cloud-Auth.  
+1. **Weg A:** Unprivileged CT mit **Nesting** an `vmbr0` (keyctl optional / PVE 9 oft fehlend).  
+2. Spike-Dateien unter `/opt/tadolocal/deploy/tadolocal` (Compose mit `user: "0:0"`).  
+3. Docker + `docker compose up -d --build` — kein DB-Permission-Fehler.  
+4. `.env` mit Bridge-IP + **8-stelligem** HomeKit-PIN → pairen → Cloud-Auth.  
 5. `curl …/zones` liefert Daten; PIN aus `.env` entfernt; Volume intakt.  
 6. Kurz Go/No-Go notieren — **HA-Sync = Spike B**, nicht dieser Durchgang.

@@ -6,6 +6,12 @@
 #
 # Default network: host — required for reliable HomeKit / mDNS on the same LAN
 # as the Tado V3 bridge. See README for bridge/macvlan alternatives.
+#
+# DB permissions: Upstream Dockerfile sets USER tado (uid 1000). Named Docker
+# volumes are created as root → SQLite fails with "unable to open database file".
+# We override to user 0:0 for the spike so /data is writable. Optional hardening:
+#   docker run --rm -v tadolocal-data:/data alpine chown -R 1000:1000 /data
+#   then set user: "1000:1000" instead of "0:0".
 
 services:
   tado-local:
@@ -14,6 +20,8 @@ services:
     build:
       # Pin to Upstream release tag (reproducible rebuild)
       context: https://github.com/AmpScm/TadoLocal.git#1.1.2
+    # Override Dockerfile USER tado — see header comment (DB open failed fix)
+    user: "0:0"
     restart: unless-stopped
     # Host networking: container shares the LXC (or host) stack → same LAN as Bridge
     network_mode: host

@@ -45,10 +45,11 @@ check_nesting_hints() {
     log "Hinweis: /dev/net/tun optional; für Docker-Bridge oft nicht kritisch."
   fi
   log "Auf dem Proxmox-Host vor dem Start sicherstellen (Weg A = Default):"
-  log "  # Unprivileged CT + Nesting/keyctl in der GUI — oder:"
-  log "  pct set <CTID> --features nesting=1,keyctl=1"
-  log "  # Weg B (privileged): Nesting in der UI oft ausgegraut — Features per pct set;"
-  log "  #   nicht 'Unprivileged aus' + Nesting-Checkbox erwarten (siehe Spike-Anleitung)."
+  log "  # Unprivileged CT + Nesting in der GUI (keyctl optional — auf PVE 9 oft fehlend = ok)"
+  log "  pct set <CTID> --features nesting=1"
+  log "  # optional falls Host keyctl noch kennt: nesting=1,keyctl=1"
+  log "  # Weg B (privileged): Nesting in der UI oft ausgegraut — Features per pct set."
+  log "  # Compose braucht user 0:0 oder chown Volume (siehe fix-db-permissions.sh)."
 }
 
 install_docker() {

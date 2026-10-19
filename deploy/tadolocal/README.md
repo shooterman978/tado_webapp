@@ -19,12 +19,14 @@ Für diesen Spike und das Dual-Deploy-Zielbild (Prod = Compose im Container) ist
 
 | Variante | Empfehlung Spike | Tradeoff |
 |---|---|---|
-| **Unprivileged + `nesting=1` + `keyctl=1`** | **Default (Weg A)** | Nesting in der Proxmox-UI wählbar; Docker-in-LXC-Standard auf PVE 8 |
+| **Unprivileged + Nesting** (+ keyctl falls UI es zeigt) | **Default (Weg A)** | Nesting in der Proxmox-UI wählbar; Docker-in-LXC-Standard |
 | Privileged (+ Features per `pct set`) | Alternative (Weg B) | Nesting in der GUI oft **ausgegraut** (normal); mehr Rechte |
 
-**Wichtig:** Privileged + Nesting-Checkbox in der UI = Sackgasse. Details: Spike-Anleitung §2–§4b.
+**Wichtig:** Privileged + Nesting-Checkbox in der UI = Sackgasse. **keyctl** fehlt auf Proxmox 9 oft — kein Blocker, wenn Docker läuft.
 
-**HomeKit/mDNS:** Compose mit `network_mode: host`, CT und Tado-Bridge im **selben LAN/VLAN**, Pairing über feste Bridge-IP in `.env`.
+**DB:** Compose setzt `user: "0:0"` (Upstream-Image sonst uid 1000 vs. root-Volume → `unable to open database file`).
+
+**HomeKit:** 8-stelliger Setup-Code `XXX-XX-XXX` am Bridge-Aufkleber — **nicht** der 4-stellige Auth-Code. Compose: `network_mode: host`, gleiches LAN wie Bridge.
 
 ## Dateien
 
@@ -34,6 +36,7 @@ Für diesen Spike und das Dual-Deploy-Zielbild (Prod = Compose im Container) ist
 | `docker-compose.bridge.yml` | Optional Bridge-Netz + Port-Publish (Caveats) |
 | `.env.example` | Bridge-IP/PIN Vorlage (keine Secrets committen) |
 | `scripts/prepare-proxmox-lxc.sh` | Docker CE im LXC-Gast installieren |
+| `scripts/fix-db-permissions.sh` | Optional: Volume auf uid 1000 chownen |
 
 ## Schnellstart (im LXC)
 
