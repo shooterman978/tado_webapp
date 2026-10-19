@@ -1,5 +1,8 @@
 /**
  * Global CloudQuota badge — all Tado cloud HTTP (not schedule-only).
+ * Always visible (placeholder when API/quota unavailable) so the UI never
+ * silently hides the budget.
+ *
  * @package @heizplan/web
  */
 
@@ -7,6 +10,10 @@ import type { CloudQuotaStatus } from "@heizplan/shared";
 
 interface CloudQuotaBadgeProps {
   quota: CloudQuotaStatus | null;
+  /** True while the first quota fetch is in flight. */
+  loading?: boolean;
+  /** Set when GET /api/cloud/quota failed (old API image, offline, …). */
+  unavailableReason?: string | null;
   compact?: boolean;
 }
 
@@ -14,9 +21,27 @@ export function formatQuotaLabel(quota: CloudQuotaStatus): string {
   return `Heute: ${quota.used} / ${quota.limit} Cloud-Requests`;
 }
 
-export function CloudQuotaBadge({ quota, compact = false }: CloudQuotaBadgeProps) {
+export function CloudQuotaBadge({
+  quota,
+  loading = false,
+  unavailableReason = null,
+  compact = false,
+}: CloudQuotaBadgeProps) {
   if (!quota) {
-    return null;
+    const label = loading
+      ? compact
+        ? "…"
+        : "Cloud-Requests: laden …"
+      : compact
+        ? "—/—"
+        : unavailableReason
+          ? `Cloud-Requests: nicht verfügbar (${unavailableReason})`
+          : "Cloud-Requests: nicht verfügbar";
+    return (
+      <div className="cloud-quota-badge is-unavailable" role="status">
+        <span className="cloud-quota-badge__label">{label}</span>
+      </div>
+    );
   }
   const className = [
     "cloud-quota-badge",

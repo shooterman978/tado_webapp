@@ -793,6 +793,11 @@ input {
   background: #3a1515;
 }
 
+.cloud-quota-badge.is-unavailable {
+  color: var(--ink-dim, #8e8e93);
+  border: 1px dashed #3a3a3c;
+}
+
 .cloud-quota-badge__warn {
   font-weight: 700;
 }

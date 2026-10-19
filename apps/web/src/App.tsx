@@ -49,6 +49,8 @@ export function App() {
   const [overlay, setOverlay] = useState<Overlay>({ kind: "none" });
   const [showHumidity, setShowHumidity] = useState(() => readBool(HUMIDITY_KEY, true));
   const [quota, setQuota] = useState<CloudQuotaStatus | null>(null);
+  const [quotaLoading, setQuotaLoading] = useState(true);
+  const [quotaUnavailable, setQuotaUnavailable] = useState<string | null>(null);
   const [homeName] = useState(() => {
     try {
       return localStorage.getItem(HOME_NAME_KEY) || "Zuhause";
@@ -65,22 +67,33 @@ export function App() {
       setRefreshing(true);
     }
     try {
-      const [h, z, q] = await Promise.all([
+      const [h, z, qResult] = await Promise.all([
         fetchHealth(),
         fetchZones(),
-        fetchCloudQuota().catch(() => null),
+        fetchCloudQuota()
+          .then((q) => ({ ok: true as const, q }))
+          .catch((err: unknown) => ({
+            ok: false as const,
+            message: err instanceof Error ? err.message : "Quota-API fehlt",
+          })),
       ]);
       setHealth(h);
       setZones(z);
-      if (q) {
-        setQuota(q);
+      if (qResult.ok) {
+        setQuota(qResult.q);
+        setQuotaUnavailable(null);
+      } else {
+        setQuota(null);
+        setQuotaUnavailable(qResult.message);
       }
+      setQuotaLoading(false);
       setError(null);
       setOffline(false);
       setLastUpdated(new Date());
     } catch (err) {
       setOffline(true);
       setError(err instanceof Error ? err.message : "Laden fehlgeschlagen");
+      setQuotaLoading(false);
     } finally {
       setRefreshing(false);
     }
@@ -202,7 +215,11 @@ export function App() {
             onRefresh={() => void load()}
           />
 
-          <CloudQuotaBadge quota={quota} />
+          <CloudQuotaBadge
+            quota={quota}
+            loading={quotaLoading}
+            unavailableReason={quotaUnavailable}
+          />
 
           {error && offline ? (
             <div className="error-state" role="alert">
@@ -251,7 +268,13 @@ export function App() {
           showHumidity={showHumidity}
           onShowHumidityChange={setShowHumidity}
           quota={quota}
-          onQuotaChange={setQuota}
+          onQuotaChange={(q) => {
+            setQuota(q);
+            setQuotaUnavailable(null);
+            setQuotaLoading(false);
+          }}
+          quotaLoading={quotaLoading}
+          quotaUnavailable={quotaUnavailable}
         />
       ) : null}
 

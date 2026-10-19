@@ -27,6 +27,8 @@ interface SettingsScreenProps {
   onShowHumidityChange: (value: boolean) => void;
   quota: CloudQuotaStatus | null;
   onQuotaChange: (quota: CloudQuotaStatus) => void;
+  quotaLoading?: boolean;
+  quotaUnavailable?: string | null;
 }
 
 interface RowProps {
@@ -62,6 +64,8 @@ export function SettingsScreen({
   onShowHumidityChange,
   quota,
   onQuotaChange,
+  quotaLoading = false,
+  quotaUnavailable = null,
 }: SettingsScreenProps) {
   const [ow, setOw] = useState<OpenWindowSettings | null>(null);
   const [owError, setOwError] = useState<string | null>(null);
@@ -152,14 +156,18 @@ export function SettingsScreen({
 
       <p className="settings__section-label">Cloud-Quota</p>
       <div className="settings-group settings-group--quota">
-        <CloudQuotaBadge quota={quota} />
+        <CloudQuotaBadge
+          quota={quota}
+          loading={quotaLoading}
+          unavailableReason={quotaUnavailable}
+        />
         <p className="settings__hint settings__hint--inline">
-          Zählt <strong>alle</strong> Cloud-HTTP-Calls (Metadaten, Schedule, openWindow, Auth).
-          Reset Mitternacht Europe/Berlin
+          Zählt alle Cloud-HTTP-Calls (Metadaten, Schedule, openWindow, Auth). Reset Mitternacht
+          Europe/Berlin
           {quota
             ? ` · ${new Date(quota.resetsAt).toLocaleString("de-DE", { timeZone: "Europe/Berlin" })}`
             : ""}
-          . Später: CalendarOverride nutzt dieselbe Quota + <code>resetsAt</code>/remaining.
+          . Unabhängig von Cloud-Login (Zähler lokal). Endpoint: GET /api/cloud/quota.
         </p>
         {quota ? (
           <p className="settings-row__meta settings-quota-line">{formatQuotaLabel(quota)}</p>
