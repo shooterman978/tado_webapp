@@ -32,7 +32,11 @@ import {
   putHomeDayBlocks,
   refreshAccessToken,
 } from "./client.js";
-import { CloudQuotaExceededError, getCloudQuota } from "./quota.js";
+import {
+  CloudQuotaExceededError,
+  getCloudQuota,
+  runCloudRequestGroup,
+} from "./quota.js";
 import {
   loadCloudTokens,
   loadZoneMetadata,
@@ -177,73 +181,74 @@ export async function updateZoneSchedule(
   quota: CloudQuotaStatus;
   presence: SchedulePresence;
 }> {
-  const meta = await loadZoneMetadata(dataDir());
-  if (!meta?.homeId) {
-    throw new ScheduleNotLinkedError(
-      "Cloud metadata missing — link account and POST /api/cloud/sync first.",
-    );
-  }
-  const { cloudZoneId, zoneName } = resolveZone(roomId, meta);
-  const accessToken = await ensureAccessToken();
-  const roomKey = roomId.startsWith("room-") ? roomId : `room-z${cloudZoneId}`;
+  return runCloudRequestGroup("Schedule speichern", async () => {
+    const meta = await loadZoneMetadata(dataDir());
+    if (!meta?.homeId) {
+      throw new ScheduleNotLinkedError(
+        "Cloud metadata missing — link account and POST /api/cloud/sync first.",
+      );
+    }
+    const { cloudZoneId, zoneName } = resolveZone(roomId, meta);
+    const accessToken = await ensureAccessToken();
+    const roomKey = roomId.startsWith("room-") ? roomId : `room-z${cloudZoneId}`;
 
-  if (update.presence === "AWAY") {
-    if (!update.away) {
-      throw new Error('away payload required when presence is "AWAY"');
-    }
-    const away: AwayConfiguration = {
-      power: update.away.power === "OFF" ? "OFF" : "ON",
-      tempC:
-        update.away.power === "OFF"
-          ? null
-          : typeof update.away.tempC === "number"
-            ? update.away.tempC
-            : 5,
-    };
-    await putAwayConfiguration(accessToken, meta.homeId, cloudZoneId, away);
-  } else {
-    if (!update.dayType || !update.blocks) {
-      throw new Error('dayType and blocks required when presence is "HOME"');
-    }
-    // UI always sends timetableTypeId from the last GET — avoids an extra cloud round-trip.
-    const timetableTypeId = update.timetableTypeId;
-    if (timetableTypeId == null) {
-      throw new Error("timetableTypeId required when presence is HOME");
-    }
-    if (
-      update.switchActiveTimetable === true
-    ) {
-      await putActiveTimetable(
+    if (update.presence === "AWAY") {
+      if (!update.away) {
+        throw new Error('away payload required when presence is "AWAY"');
+      }
+      const away: AwayConfiguration = {
+        power: update.away.power === "OFF" ? "OFF" : "ON",
+        tempC:
+          update.away.power === "OFF"
+            ? null
+            : typeof update.away.tempC === "number"
+              ? update.away.tempC
+              : 5,
+      };
+      await putAwayConfiguration(accessToken, meta.homeId, cloudZoneId, away);
+    } else {
+      if (!update.dayType || !update.blocks) {
+        throw new Error('dayType and blocks required when presence is "HOME"');
+      }
+      // UI always sends timetableTypeId from the last GET — avoids an extra cloud round-trip.
+      const timetableTypeId = update.timetableTypeId;
+      if (timetableTypeId == null) {
+        throw new Error("timetableTypeId required when presence is HOME");
+      }
+      if (update.switchActiveTimetable === true) {
+        await putActiveTimetable(
+          accessToken,
+          meta.homeId,
+          cloudZoneId,
+          timetableTypeId,
+        );
+      }
+      assertDayType(timetableTypeId, update.dayType);
+      validateBlocks(update.dayType, update.blocks);
+      await putHomeDayBlocks(
         accessToken,
         meta.homeId,
         cloudZoneId,
         timetableTypeId,
+        update.dayType,
+        update.blocks.map((b) => ({ ...b, dayType: update.dayType! })),
       );
     }
-    assertDayType(timetableTypeId, update.dayType);
-    validateBlocks(update.dayType, update.blocks);
-    await putHomeDayBlocks(
+
+    // Nested "Schedule lesen" group is skipped — stays under "Schedule speichern".
+    const schedule = await fetchZoneSchedule(
       accessToken,
       meta.homeId,
       cloudZoneId,
-      timetableTypeId,
-      update.dayType,
-      update.blocks.map((b) => ({ ...b, dayType: update.dayType! })),
+      roomKey,
+      zoneName,
     );
-  }
-
-  const schedule = await fetchZoneSchedule(
-    accessToken,
-    meta.homeId,
-    cloudZoneId,
-    roomKey,
-    zoneName,
-  );
-  return {
-    schedule,
-    quota: await getCloudQuota(),
-    presence: update.presence,
-  };
+    return {
+      schedule,
+      quota: await getCloudQuota(),
+      presence: update.presence,
+    };
+  });
 }
 
 export function isQuotaError(err: unknown): err is CloudQuotaExceededError {

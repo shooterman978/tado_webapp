@@ -138,6 +138,7 @@ Vor erstem HAP-Pairing:
 | POST | `/api/bridge/pair` | HAP-Pairing (PIN aus Env oder Body — nie geloggt) |
 | GET | `/api/cloud/status` | Cloud-Metadaten-Link (Raumnamen) |
 | GET | `/api/cloud/quota` | Generisches Tagesbudget aller Cloud-HTTP-Calls `{ used, limit, remaining, resetsAt, … }` |
+| GET | `/api/cloud/quota/log` | Ringpuffer der gezählten Calls (`?today=1`, `?limit=100`) |
 | PUT | `/api/cloud/quota` | Tageslimit setzen `{ "limit": 80 }` |
 | POST | `/api/cloud/auth/start` | Device-Code-Login starten |
 | POST | `/api/cloud/auth/poll` | Login abschließen / pollen |

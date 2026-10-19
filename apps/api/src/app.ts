@@ -42,6 +42,7 @@ export function createApp(): Hono {
         "/api/bridge/hap-report",
         "/api/cloud/status",
         "/api/cloud/quota",
+        "/api/cloud/quota/log",
         "/api/cloud/schedule/:roomId",
       ],
     }),

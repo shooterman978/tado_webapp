@@ -15,6 +15,7 @@ import {
 } from "../modules/cloud/service.js";
 import {
   getCloudQuota,
+  getCloudQuotaLog,
   setCloudQuotaLimit,
   CloudQuotaExceededError,
 } from "../modules/cloud/quota.js";
@@ -61,6 +62,18 @@ cloudRoutes.put("/quota", async (c) => {
     const message = err instanceof Error ? err.message : "Quota update failed";
     return c.json({ error: "quota_update_failed", message }, 400);
   }
+});
+
+/**
+ * Audit log of counted cloud HTTP calls (ring buffer).
+ * Query: ?today=1 (default) | today=0 for full buffer; ?limit=50
+ */
+cloudRoutes.get("/quota/log", async (c) => {
+  const todayParam = c.req.query("today");
+  const todayOnly = todayParam !== "0" && todayParam !== "false";
+  const limitRaw = Number(c.req.query("limit") ?? "150");
+  const limit = Number.isFinite(limitRaw) ? limitRaw : 150;
+  return c.json(await getCloudQuotaLog({ todayOnly, limit }));
 });
 
 /** Start device-code login — open verificationUriComplete in a browser. */

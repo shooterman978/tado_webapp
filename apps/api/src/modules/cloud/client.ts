@@ -21,6 +21,7 @@ import type {
 import {
   consumeCloudQuota,
   noteCloudRateLimitHeaders,
+  runCloudRequestGroup,
 } from "./quota.js";
 import type {
   CloudTokens,
@@ -112,6 +113,48 @@ function tokensFromResponse(json: TokenResponse): CloudTokens {
   };
 }
 
+/** Safe path for quota log — host stripped, query dropped (no tokens). */
+function logPathFromUrl(url: string): string {
+  try {
+    const u = new URL(url);
+    return u.pathname || "/";
+  } catch {
+    return url.split("?")[0] ?? "/";
+  }
+}
+
+function labelForCloudCall(method: string, pathname: string): string {
+  const m = method.toUpperCase();
+  if (pathname.includes("/oauth2/device_authorize")) {
+    return "auth.device_authorize";
+  }
+  if (pathname.includes("/oauth2/token")) {
+    return "auth.token";
+  }
+  if (pathname.endsWith("/me")) {
+    return "metadata.me";
+  }
+  if (/\/homes\/\d+\/zones$/.test(pathname)) {
+    return "metadata.zones";
+  }
+  if (pathname.includes("/zoneStates")) {
+    return "openWindow.zoneStates";
+  }
+  if (pathname.includes("/activeTimetable")) {
+    return m === "PUT" ? "schedule.activeTimetable.put" : "schedule.activeTimetable";
+  }
+  if (pathname.includes("/awayConfiguration")) {
+    return m === "PUT" ? "schedule.away.put" : "schedule.away";
+  }
+  if (pathname.includes("/blocks")) {
+    return m === "PUT" ? "schedule.blocks.put" : "schedule.blocks";
+  }
+  if (pathname.includes("/timetables/")) {
+    return "schedule.timetable";
+  }
+  return `cloud.${m.toLowerCase()}`;
+}
+
 /**
  * Single egress point for Tado cloud HTTP — consumes quota, never logs tokens.
  */
@@ -119,7 +162,13 @@ async function cloudFetch(
   url: string,
   init: RequestInit = {},
 ): Promise<Response> {
-  await consumeCloudQuota(1);
+  const method = (init.method ?? "GET").toUpperCase();
+  const pathName = logPathFromUrl(url);
+  await consumeCloudQuota(1, {
+    method,
+    path: pathName,
+    label: labelForCloudCall(method, pathName),
+  });
   const headers = new Headers(init.headers);
   if (!headers.has("Accept")) {
     headers.set("Accept", "application/json");
@@ -146,6 +195,8 @@ async function postForm(
     body,
   });
 }
+
+export { runCloudRequestGroup };
 
 /** Start OAuth device-code flow (user completes browser login once). */
 export async function startDeviceAuth(): Promise<{
@@ -302,51 +353,53 @@ async function apiPut<T>(
 export async function fetchZoneMetadata(
   accessToken: string,
 ): Promise<ZoneMetadata> {
-  const me = await apiGet<MeResponse>(accessToken, "/me");
-  const home = me.homes?.[0];
-  if (!home?.id) {
-    throw new Error("No tado° home linked to this account.");
-  }
-
-  const zones = await apiGet<CloudZone[]>(
-    accessToken,
-    `/homes/${home.id}/zones`,
-  );
-
-  const devices: Record<string, DeviceZoneMeta> = {};
-  for (const zone of zones) {
-    if (!zone?.id || !zone.name) {
-      continue;
+  return runCloudRequestGroup("Metadaten sync", async () => {
+    const me = await apiGet<MeResponse>(accessToken, "/me");
+    const home = me.homes?.[0];
+    if (!home?.id) {
+      throw new Error("No tado° home linked to this account.");
     }
-    // Heating rooms only — skip HOT_WATER etc.
-    if (zone.type && zone.type !== "HEATING") {
-      continue;
-    }
-    for (const device of zone.devices ?? []) {
-      const serial = device.serialNo?.trim();
-      if (!serial) {
+
+    const zones = await apiGet<CloudZone[]>(
+      accessToken,
+      `/homes/${home.id}/zones`,
+    );
+
+    const devices: Record<string, DeviceZoneMeta> = {};
+    for (const zone of zones) {
+      if (!zone?.id || !zone.name) {
         continue;
       }
-      const meta: DeviceZoneMeta = {
-        zoneId: zone.id,
-        zoneName: zone.name,
-        serialNo: serial,
-        shortSerialNo: device.shortSerialNo,
-        deviceType: device.deviceType,
-      };
-      devices[serial.toUpperCase()] = meta;
-      if (device.shortSerialNo) {
-        devices[device.shortSerialNo.toUpperCase()] = meta;
+      // Heating rooms only — skip HOT_WATER etc.
+      if (zone.type && zone.type !== "HEATING") {
+        continue;
+      }
+      for (const device of zone.devices ?? []) {
+        const serial = device.serialNo?.trim();
+        if (!serial) {
+          continue;
+        }
+        const meta: DeviceZoneMeta = {
+          zoneId: zone.id,
+          zoneName: zone.name,
+          serialNo: serial,
+          shortSerialNo: device.shortSerialNo,
+          deviceType: device.deviceType,
+        };
+        devices[serial.toUpperCase()] = meta;
+        if (device.shortSerialNo) {
+          devices[device.shortSerialNo.toUpperCase()] = meta;
+        }
       }
     }
-  }
 
-  return {
-    homeId: home.id,
-    homeName: home.name,
-    syncedAt: new Date().toISOString(),
-    devices,
-  };
+    return {
+      homeId: home.id,
+      homeName: home.name,
+      syncedAt: new Date().toISOString(),
+      devices,
+    };
+  });
 }
 
 interface CloudZoneState {
@@ -475,43 +528,45 @@ export async function fetchZoneSchedule(
   roomId: string,
   zoneName: string,
 ): Promise<ZoneSchedule> {
-  const active = await apiGet<TimetableTypeResponse>(
-    accessToken,
-    `/homes/${homeId}/zones/${cloudZoneId}/schedule/activeTimetable`,
-  );
-  const timetableTypeId = (active?.id ?? 1) as 0 | 1 | 2;
-  const timetableType = (active?.type ??
-    (timetableTypeId === 0
-      ? "ONE_DAY"
-      : timetableTypeId === 2
-        ? "SEVEN_DAY"
-        : "THREE_DAY")) as TimetableKind;
-
-  const rawBlocks = await apiGet<RawTimetableBlock[]>(
-    accessToken,
-    `/homes/${homeId}/zones/${cloudZoneId}/schedule/timetables/${timetableTypeId}/blocks`,
-  );
-
-  let awayRaw: RawAwayConfiguration | null = null;
-  try {
-    awayRaw = await apiGet<RawAwayConfiguration>(
+  return runCloudRequestGroup("Schedule lesen", async () => {
+    const active = await apiGet<TimetableTypeResponse>(
       accessToken,
-      `/homes/${homeId}/zones/${cloudZoneId}/schedule/awayConfiguration`,
+      `/homes/${homeId}/zones/${cloudZoneId}/schedule/activeTimetable`,
     );
-  } catch {
-    awayRaw = null;
-  }
+    const timetableTypeId = (active?.id ?? 1) as 0 | 1 | 2;
+    const timetableType = (active?.type ??
+      (timetableTypeId === 0
+        ? "ONE_DAY"
+        : timetableTypeId === 2
+          ? "SEVEN_DAY"
+          : "THREE_DAY")) as TimetableKind;
 
-  return {
-    roomId,
-    cloudZoneId,
-    zoneName,
-    timetableType,
-    timetableTypeId,
-    homeBlocks: (rawBlocks ?? []).map(mapBlock),
-    away: mapAway(awayRaw),
-    fetchedAt: new Date().toISOString(),
-  };
+    const rawBlocks = await apiGet<RawTimetableBlock[]>(
+      accessToken,
+      `/homes/${homeId}/zones/${cloudZoneId}/schedule/timetables/${timetableTypeId}/blocks`,
+    );
+
+    let awayRaw: RawAwayConfiguration | null = null;
+    try {
+      awayRaw = await apiGet<RawAwayConfiguration>(
+        accessToken,
+        `/homes/${homeId}/zones/${cloudZoneId}/schedule/awayConfiguration`,
+      );
+    } catch {
+      awayRaw = null;
+    }
+
+    return {
+      roomId,
+      cloudZoneId,
+      zoneName,
+      timetableType,
+      timetableTypeId,
+      homeBlocks: (rawBlocks ?? []).map(mapBlock),
+      away: mapAway(awayRaw),
+      fetchedAt: new Date().toISOString(),
+    };
+  });
 }
 
 /** Replace all Home timetable blocks for one dayType (visible in official Tado app). */

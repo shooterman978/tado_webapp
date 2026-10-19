@@ -1,6 +1,7 @@
 import type {
   CloudAuthPollResult,
   CloudAuthStart,
+  CloudQuotaLogResponse,
   CloudQuotaStatus,
   CloudStatus,
   HealthStatus,
@@ -179,6 +180,23 @@ export function syncCloudMetadata(): Promise<{
 
 export function fetchCloudQuota(): Promise<CloudQuotaStatus> {
   return getJson<CloudQuotaStatus>("/api/cloud/quota");
+}
+
+export function fetchCloudQuotaLog(opts?: {
+  todayOnly?: boolean;
+  limit?: number;
+}): Promise<CloudQuotaLogResponse> {
+  const params = new URLSearchParams();
+  if (opts?.todayOnly === false) {
+    params.set("today", "0");
+  }
+  if (opts?.limit != null) {
+    params.set("limit", String(opts.limit));
+  }
+  const q = params.toString();
+  return getJson<CloudQuotaLogResponse>(
+    `/api/cloud/quota/log${q ? `?${q}` : ""}`,
+  );
 }
 
 export function saveCloudQuotaLimit(limit: number): Promise<CloudQuotaStatus> {

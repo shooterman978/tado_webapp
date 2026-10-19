@@ -19,6 +19,7 @@ import {
 } from "../api";
 import { CloudLinkPanel } from "./CloudLinkPanel";
 import { CloudQuotaBadge, formatQuotaLabel } from "./CloudQuotaBadge";
+import { CloudRequestLog } from "./CloudRequestLog";
 import { ChevronIcon } from "./icons";
 
 interface SettingsScreenProps {
@@ -223,6 +224,11 @@ export function SettingsScreen({
             {quotaError}
           </p>
         ) : null}
+      </div>
+
+      <p className="settings__section-label">Cloud-Requests</p>
+      <div className="settings-group settings-group--quota">
+        <CloudRequestLog />
       </div>
 
       <p className="settings__section-label">Fenster offen</p>

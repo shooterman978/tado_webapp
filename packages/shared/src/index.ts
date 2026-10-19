@@ -198,6 +198,37 @@ export interface CloudQuotaStatus {
   headerLimitHint: number | null;
 }
 
+/** One counted cloud HTTP call (no tokens/secrets). */
+export interface CloudQuotaLogEntry {
+  id: string;
+  /** ISO timestamp. */
+  at: string;
+  /** Europe/Berlin day key when the call was counted. */
+  dayKey: string;
+  method: string;
+  /** Path only (host stripped); never includes auth query secrets. */
+  path: string;
+  /** Human-readable reason, e.g. schedule.blocks. */
+  label: string;
+  /** Quota delta (usually 1). */
+  delta: number;
+  /** Optional group id when several calls belong to one user action (e.g. schedule sync). */
+  groupId?: string | null;
+  /** Optional group label, e.g. "Schedule lesen". */
+  groupLabel?: string | null;
+}
+
+export interface CloudQuotaLogResponse {
+  entries: CloudQuotaLogEntry[];
+  /** Total entries retained in the ring buffer. */
+  retained: number;
+  /** Max ring size. */
+  maxRetained: number;
+  /** When true, only today's (Berlin) entries are included. */
+  todayOnly: boolean;
+  dayKey: string;
+}
+
 /** Day-type keys used by Tado timetable blocks. */
 export type ScheduleDayType =
   | "MONDAY_TO_SUNDAY"
