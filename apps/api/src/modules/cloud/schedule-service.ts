@@ -39,8 +39,10 @@ import {
 } from "./quota.js";
 import {
   loadCloudTokens,
+  loadScheduleCache,
   loadZoneMetadata,
   saveCloudTokens,
+  saveScheduleCacheEntry,
   type ZoneMetadata,
 } from "./store.js";
 
@@ -55,6 +57,15 @@ export class ScheduleZoneUnresolvedError extends Error {
   constructor(roomId: string) {
     super(`No cloud zone mapped for room "${roomId}". Sync metadata first.`);
     this.name = "ScheduleZoneUnresolvedError";
+  }
+}
+
+export class ScheduleCacheMissError extends Error {
+  constructor(roomId: string) {
+    super(
+      `Kein lokaler Zeitplan-Cache für "${roomId}". Bitte „Jetzt synchronisieren“ tippen.`,
+    );
+    this.name = "ScheduleCacheMissError";
   }
 }
 
@@ -113,13 +124,11 @@ function resolveZone(
   throw new ScheduleZoneUnresolvedError(roomId);
 }
 
-/**
- * Read Smart Schedule from Tado cloud (counts against CloudQuota).
- * Hook: CalendarOverride should call this for the baseline Home/Away plan.
- */
-export async function getZoneSchedule(roomId: string): Promise<{
-  schedule: ZoneSchedule;
-  quota: CloudQuotaStatus;
+async function resolveRoomKey(roomId: string): Promise<{
+  roomKey: string;
+  cloudZoneId: number;
+  zoneName: string;
+  homeId: number;
 }> {
   const meta = await loadZoneMetadata(dataDir());
   if (!meta?.homeId) {
@@ -128,15 +137,61 @@ export async function getZoneSchedule(roomId: string): Promise<{
     );
   }
   const { cloudZoneId, zoneName } = resolveZone(roomId, meta);
-  const accessToken = await ensureAccessToken();
-  const schedule = await fetchZoneSchedule(
-    accessToken,
-    meta.homeId,
-    cloudZoneId,
-    roomId.startsWith("room-") ? roomId : `room-z${cloudZoneId}`,
-    zoneName,
-  );
-  return { schedule, quota: await getCloudQuota() };
+  const roomKey = roomId.startsWith("room-") ? roomId : `room-z${cloudZoneId}`;
+  return { roomKey, cloudZoneId, zoneName, homeId: meta.homeId };
+}
+
+/**
+ * Read schedule from local disk cache — **no** cloud HTTP.
+ * Hook: CalendarOverride should use this for the baseline when possible.
+ */
+export async function getCachedZoneSchedule(roomId: string): Promise<{
+  schedule: ZoneSchedule;
+  quota: CloudQuotaStatus;
+  fromCache: true;
+}> {
+  const { roomKey } = await resolveRoomKey(roomId);
+  const cache = await loadScheduleCache(dataDir());
+  const schedule = cache.schedules[roomKey];
+  if (!schedule) {
+    throw new ScheduleCacheMissError(roomKey);
+  }
+  return { schedule, quota: await getCloudQuota(), fromCache: true };
+}
+
+/**
+ * Pull Smart Schedule from Tado cloud (counts against CloudQuota) and cache it.
+ * Only call from an explicit user action (sync button) — never on room enter.
+ */
+export async function syncZoneScheduleFromCloud(roomId: string): Promise<{
+  schedule: ZoneSchedule;
+  quota: CloudQuotaStatus;
+  fromCache: false;
+}> {
+  return runCloudRequestGroup("Schedule sync", async () => {
+    const { roomKey, cloudZoneId, zoneName, homeId } = await resolveRoomKey(roomId);
+    const accessToken = await ensureAccessToken();
+    const schedule = await fetchZoneSchedule(
+      accessToken,
+      homeId,
+      cloudZoneId,
+      roomKey,
+      zoneName,
+    );
+    await saveScheduleCacheEntry(dataDir(), roomKey, schedule);
+    return { schedule, quota: await getCloudQuota(), fromCache: false as const };
+  });
+}
+
+export async function listScheduleCacheTimes(): Promise<Record<string, string>> {
+  const cache = await loadScheduleCache(dataDir());
+  const out: Record<string, string> = {};
+  for (const [id, schedule] of Object.entries(cache.schedules)) {
+    if (schedule?.fetchedAt) {
+      out[id] = schedule.fetchedAt;
+    }
+  }
+  return out;
 }
 
 function assertDayType(
@@ -243,6 +298,7 @@ export async function updateZoneSchedule(
       roomKey,
       zoneName,
     );
+    await saveScheduleCacheEntry(dataDir(), roomKey, schedule);
     return {
       schedule,
       quota: await getCloudQuota(),

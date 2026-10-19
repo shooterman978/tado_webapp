@@ -142,10 +142,11 @@ Vor erstem HAP-Pairing:
 | PUT | `/api/cloud/quota` | Tageslimit setzen `{ "limit": 80 }` |
 | POST | `/api/cloud/auth/start` | Device-Code-Login starten |
 | POST | `/api/cloud/auth/poll` | Login abschließen / pollen |
-| POST | `/api/cloud/sync` | Zone-Namen erneut von der Cloud holen |
-| GET | `/api/cloud/schedule/:roomId` | Smart Schedule lesen (Home-Timetable + Away) |
+| GET | `/api/cloud/sync` | Home-Sync-Status (Disk: `lastSyncedAt`, Auto-Intervall) — kein Cloud-HTTP |
+| POST | `/api/cloud/sync` | Home Cloud-Sync (Metadaten + openWindow); Schedules nicht |
+| GET | `/api/cloud/schedule/:roomId` | Schedule aus lokalem Cache (kein Cloud-HTTP; Cache-Miss → 404) |
 | PUT | `/api/cloud/schedule/:roomId` | Schedule schreiben → sichtbar in Tado-App |
-| POST | `/api/cloud/schedule/:roomId/sync` | Manuell neu laden („Jetzt synchronisieren“) |
+| POST | `/api/cloud/schedule/:roomId/sync` | Expliziter Cloud-Pull („Jetzt synchronisieren“) |
 
 ---
 
@@ -164,16 +165,18 @@ Vor erstem HAP-Pairing:
 
 ## CloudQuota & Schedule
 
-- **Ein** Zähler für Metadaten, Schedule GET/PUT, openWindow-Cloud-Fallback, Auth-Refresh.
+- **Ein** Zähler für Metadaten, Schedule-Sync/PUT, openWindow beim Home-Sync, Auth-Refresh.
 - Default-Limit: `CLOUD_DAILY_REQUEST_LIMIT=80` (konservativ unter ~100 ohne Abo); optional Header-Hint `X-RateLimit-Limit`.
-- UI: Badge „Heute: X / Y Cloud-Requests“ (Home + Schedule + Settings); bei Limit → 429 + klare Meldung, keine weiteren Syncs.
+- Home-Sync: manuell (Button) + Auto alle `CLOUD_AUTO_SYNC_HOURS` (Default **4**). Room-Enter holt weder Schedule noch Metadata aus der Cloud.
+- Schedule: GET = Cache; Cloud nur über Sync-Button. UI zeigt `lastSyncedAt` (Home + Raum/Zeitplan).
+- UI: Badge „Heute: X / Y Cloud-Requests“; bei Limit → 429 + klare Meldung.
 - Smart Schedule: Home = Timetable-Blöcke; Away = `awayConfiguration` (fester Soll in der Tado-API).
 
 ### Hook für späteren CalendarOverride (nicht in diesem PR)
 
 Priorität skizziert: `CalendarOverride` (zeitlich) > manuelles Raum-Overlay > Smart Schedule (Cloud-Baseline).
 
-1. Baseline lesen: `GET /api/cloud/schedule/:roomId` bzw. `getZoneSchedule()`.
+1. Baseline lesen: `GET /api/cloud/schedule/:roomId` bzw. `getCachedZoneSchedule()` (Cache).
 2. Kurzfristig: lokales HAP-Overlay bevorzugen (0 Cloud-Spend).
 3. Wenn Cloud-Write nötig: über `schedule-service` / dieselbe CloudQuota; `remaining` + `resetsAt` für Re-Apply/Restore nach Event-Ende oder Berlin-Mitternacht.
 4. Typed placeholder: `CalendarRuleHook` in `@heizplan/shared` (+ Kommentare in `schedule-service.ts`).

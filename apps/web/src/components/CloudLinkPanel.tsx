@@ -11,7 +11,7 @@ import {
   fetchCloudStatus,
   pollCloudAuth,
   startCloudAuth,
-  syncCloudMetadata,
+  syncCloudHome,
 } from "../api";
 
 interface CloudLinkPanelProps {
@@ -93,9 +93,11 @@ export function CloudLinkPanel({ naming, onLinked }: CloudLinkPanelProps) {
     setBusy(true);
     setError(null);
     try {
-      const res = await syncCloudMetadata();
+      const res = await syncCloudHome();
       setCloud(res.cloud);
-      setMessage(`Raumnamen aktualisiert (${res.homeName}).`);
+      setMessage(
+        `Home-Sync ok (${res.homeName}) · Stand ${new Date(res.syncedAt).toLocaleString("de-DE")}`,
+      );
       onLinked?.();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Sync fehlgeschlagen");
@@ -131,7 +133,7 @@ export function CloudLinkPanel({ naming, onLinked }: CloudLinkPanelProps) {
           </button>
         ) : (
           <button type="button" className="cloud-link__btn" disabled={busy} onClick={() => void resync()}>
-            {busy ? "…" : "Raumnamen jetzt syncen"}
+            {busy ? "…" : "Home Cloud jetzt syncen"}
           </button>
         )}
       </div>

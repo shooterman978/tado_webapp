@@ -43,6 +43,11 @@ export const config = {
    */
   cloudDailyLimit: Number(env("CLOUD_DAILY_REQUEST_LIMIT", "80")),
   /**
+   * Home cloud auto-sync interval (metadata + openWindow), hours.
+   * Schedules are never auto-fetched on room enter — only via explicit sync.
+   */
+  cloudAutoSyncHours: Number(env("CLOUD_AUTO_SYNC_HOURS", "4")),
+  /**
    * Extension points (not wired in MVP scaffold):
    * - DATABASE_URL → rules, learning samples, sync audit
    * - HA_URL / HA_TOKEN → Home Assistant sync

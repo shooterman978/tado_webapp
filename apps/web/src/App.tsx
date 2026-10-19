@@ -10,6 +10,7 @@ import { BottomNav, type NavTab } from "./components/BottomNav";
 import { BridgeStatus } from "./components/BridgeStatus";
 import { CloudLinkPanel } from "./components/CloudLinkPanel";
 import { CloudQuotaBadge } from "./components/CloudQuotaBadge";
+import { HomeCloudSync } from "./components/HomeCloudSync";
 import { MoreScreen } from "./components/MoreScreen";
 import { QuickActions } from "./components/QuickActions";
 import { RoomDetail } from "./components/RoomDetail";
@@ -221,6 +222,17 @@ export function App() {
             loading={quotaLoading}
             unavailableReason={quotaUnavailable}
           />
+
+          {!offline ? (
+            <HomeCloudSync
+              onSynced={() => void load({ quiet: true })}
+              onQuotaChange={(q) => {
+                setQuota(q);
+                setQuotaUnavailable(null);
+                setQuotaLoading(false);
+              }}
+            />
+          ) : null}
 
           {error && offline ? (
             <div className="error-state" role="alert">

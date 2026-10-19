@@ -4,6 +4,7 @@ import type {
   CloudQuotaLogResponse,
   CloudQuotaStatus,
   CloudStatus,
+  CloudSyncStatus,
   HealthStatus,
   OpenWindowSettings,
   ZoneSchedule,
@@ -168,14 +169,36 @@ export async function pollCloudAuth(): Promise<CloudAuthPollResult> {
   return res.json() as Promise<CloudAuthPollResult>;
 }
 
+/** Disk-only sync bookmark (no cloud HTTP). */
+export function fetchCloudSyncStatus(): Promise<CloudSyncStatus> {
+  return getJson<CloudSyncStatus>("/api/cloud/sync");
+}
+
+/** Explicit home cloud sync (metadata + openWindow). Does not pull schedules. */
+export function syncCloudHome(): Promise<{
+  ok: boolean;
+  syncedAt: string;
+  homeName: string;
+  deviceCount: number;
+  openWindowCount: number;
+  cloud: CloudStatus;
+  sync: CloudSyncStatus;
+  quota: CloudQuotaStatus;
+}> {
+  return postJsonResult("/api/cloud/sync");
+}
+
+/** @deprecated Prefer {@link syncCloudHome}. */
 export function syncCloudMetadata(): Promise<{
   ok: boolean;
   syncedAt: string;
   homeName: string;
   deviceCount: number;
   cloud: CloudStatus;
+  sync?: CloudSyncStatus;
+  quota?: CloudQuotaStatus;
 }> {
-  return postJsonResult("/api/cloud/sync");
+  return syncCloudHome();
 }
 
 export function fetchCloudQuota(): Promise<CloudQuotaStatus> {
@@ -203,17 +226,21 @@ export function saveCloudQuotaLimit(limit: number): Promise<CloudQuotaStatus> {
   return putJson<CloudQuotaStatus>("/api/cloud/quota", { limit });
 }
 
+/** Local schedule cache only — never hits Tado cloud. */
 export function fetchZoneSchedule(roomId: string): Promise<{
   schedule: ZoneSchedule;
   quota: CloudQuotaStatus;
+  fromCache: boolean;
 }> {
   return getJson(`/api/cloud/schedule/${encodeURIComponent(roomId)}`);
 }
 
+/** Explicit room schedule pull from Tado cloud. */
 export function syncZoneSchedule(roomId: string): Promise<{
   ok: boolean;
   schedule: ZoneSchedule;
   quota: CloudQuotaStatus;
+  fromCache: boolean;
 }> {
   return postJsonResult(`/api/cloud/schedule/${encodeURIComponent(roomId)}/sync`);
 }

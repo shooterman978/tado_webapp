@@ -1,5 +1,5 @@
 /**
- * Tado cloud routes — OAuth, metadata, Smart Schedule, shared CloudQuota.
+ * Tado cloud routes — OAuth, sparse home sync, cached Smart Schedule, CloudQuota.
  *
  * @package @heizplan/api
  */
@@ -9,8 +9,9 @@ import type { ZoneScheduleUpdate } from "@heizplan/shared";
 import {
   beginCloudAuth,
   getCloudStatus,
+  getCloudSyncStatus,
   pollCloudAuth,
-  syncZoneMetadata,
+  runHomeCloudSync,
   unlinkCloud,
 } from "../modules/cloud/service.js";
 import {
@@ -20,10 +21,12 @@ import {
   CloudQuotaExceededError,
 } from "../modules/cloud/quota.js";
 import {
-  getZoneSchedule,
+  getCachedZoneSchedule,
   isQuotaError,
+  ScheduleCacheMissError,
   ScheduleNotLinkedError,
   ScheduleZoneUnresolvedError,
+  syncZoneScheduleFromCloud,
   updateZoneSchedule,
 } from "../modules/cloud/schedule-service.js";
 
@@ -43,6 +46,11 @@ function quotaHttp(err: CloudQuotaExceededError) {
 cloudRoutes.get("/status", async (c) => {
   const status = await getCloudStatus();
   return c.json(status);
+});
+
+/** Disk-only home sync bookmark (no cloud HTTP). */
+cloudRoutes.get("/sync", async (c) => {
+  return c.json(await getCloudSyncStatus());
 });
 
 /** Shared daily budget for all cloud HTTP (not schedule-specific). */
@@ -116,19 +124,22 @@ cloudRoutes.post("/auth/poll", async (c) => {
   }
 });
 
-/** Refresh zone-name metadata from the cloud (requires linked account). */
+/**
+ * Explicit home cloud sync (metadata + openWindow snapshot).
+ * Does not pull room schedules — those use POST /schedule/:roomId/sync.
+ */
 cloudRoutes.post("/sync", async (c) => {
   try {
-    const meta = await syncZoneMetadata();
-    const status = await getCloudStatus();
-    const quota = await getCloudQuota();
+    const result = await runHomeCloudSync();
     return c.json({
       ok: true,
-      syncedAt: meta.syncedAt,
-      homeName: meta.homeName,
-      deviceCount: Object.keys(meta.devices).length,
-      cloud: status,
-      quota,
+      syncedAt: result.syncedAt,
+      homeName: result.meta.homeName,
+      deviceCount: Object.keys(result.meta.devices).length,
+      openWindowCount: result.openWindowCount,
+      cloud: await getCloudStatus(),
+      sync: result.sync,
+      quota: result.quota,
     });
   } catch (err) {
     if (isQuotaError(err)) {
@@ -149,18 +160,24 @@ cloudRoutes.post("/unlink", async (c) => {
 });
 
 /**
- * Smart Schedule for a room (`room-z{cloudZoneId}` or numeric cloud id).
- * GET counts against CloudQuota (typically 3 cloud HTTP calls).
+ * Smart Schedule from local disk cache — **no** cloud HTTP.
+ * Cache miss → 404 `schedule_cache_miss` (user must tap sync).
  */
 cloudRoutes.get("/schedule/:roomId", async (c) => {
   const roomId = c.req.param("roomId");
   try {
-    const { schedule, quota } = await getZoneSchedule(roomId);
-    return c.json({ schedule, quota });
+    const { schedule, quota, fromCache } = await getCachedZoneSchedule(roomId);
+    return c.json({ schedule, quota, fromCache });
   } catch (err) {
-    if (isQuotaError(err)) {
-      const q = quotaHttp(err);
-      return c.json(q.body, q.status);
+    if (err instanceof ScheduleCacheMissError) {
+      return c.json(
+        {
+          error: "schedule_cache_miss",
+          message: err.message,
+          quota: await getCloudQuota(),
+        },
+        404,
+      );
     }
     if (err instanceof ScheduleNotLinkedError) {
       return c.json({ error: "cloud_not_linked", message: err.message }, 409);
@@ -176,7 +193,7 @@ cloudRoutes.get("/schedule/:roomId", async (c) => {
 
 /**
  * Persist Home day blocks or Away config → official Tado app.
- * Manual "Jetzt synchronisieren" is GET; edits use PUT (auto-sync).
+ * Room-enter never writes; edits use PUT.
  */
 cloudRoutes.put("/schedule/:roomId", async (c) => {
   const roomId = c.req.param("roomId");
@@ -215,12 +232,12 @@ cloudRoutes.put("/schedule/:roomId", async (c) => {
   }
 });
 
-/** Alias for GET schedule — explicit "Jetzt synchronisieren" from the PWA. */
+/** Explicit "Jetzt synchronisieren" — pulls schedule from Tado cloud + caches. */
 cloudRoutes.post("/schedule/:roomId/sync", async (c) => {
   const roomId = c.req.param("roomId");
   try {
-    const { schedule, quota } = await getZoneSchedule(roomId);
-    return c.json({ ok: true, schedule, quota });
+    const { schedule, quota, fromCache } = await syncZoneScheduleFromCloud(roomId);
+    return c.json({ ok: true, schedule, quota, fromCache });
   } catch (err) {
     if (isQuotaError(err)) {
       const q = quotaHttp(err);

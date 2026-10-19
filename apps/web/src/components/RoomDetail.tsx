@@ -7,6 +7,7 @@ import { useEffect, useRef, useState } from "react";
 import type { Zone } from "@heizplan/shared";
 import {
   clearZoneOverlay,
+  fetchCloudSyncStatus,
   setZonePower,
   setZoneTemperature,
 } from "../api";
@@ -61,6 +62,8 @@ export function RoomDetail({
   const [draft, setDraft] = useState(zone.targetTempC ?? 20);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [homeSyncedAt, setHomeSyncedAt] = useState<string | null>(null);
+  const [scheduleSyncedAt, setScheduleSyncedAt] = useState<string | null>(null);
   const trackRef = useRef<HTMLDivElement>(null);
   const dragging = useRef(false);
 
@@ -69,6 +72,44 @@ export function RoomDetail({
       setDraft(zone.targetTempC);
     }
   }, [zone.id, zone.targetTempC]);
+
+  /** Disk-only sync stamps — opening a room must not hit Tado cloud. */
+  useEffect(() => {
+    let cancelled = false;
+    void fetchCloudSyncStatus()
+      .then((s) => {
+        if (cancelled) {
+          return;
+        }
+        setHomeSyncedAt(s.lastSyncedAt);
+        setScheduleSyncedAt(s.scheduleSyncedAt[zone.id] ?? null);
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setHomeSyncedAt(null);
+          setScheduleSyncedAt(null);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [zone.id]);
+
+  function formatSyncStamp(iso: string | null): string {
+    if (!iso) {
+      return "—";
+    }
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) {
+      return "—";
+    }
+    return d.toLocaleString("de-DE", {
+      day: "2-digit",
+      month: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  }
 
   const off = heatMode(zone) === "off";
   const heating = isActivelyHeating(zone);
@@ -178,6 +219,13 @@ export function RoomDetail({
           </p>
         ) : null}
       </div>
+
+      <p className="room-detail__sync-stamp">
+        Cloud Home {formatSyncStamp(homeSyncedAt)}
+        {" · "}
+        Zeitplan {formatSyncStamp(scheduleSyncedAt)}
+        {" (Sync im Zeitplan)"}
+      </p>
 
       {zone.windowOpen ? (
         <div className="window-banner" role="status">

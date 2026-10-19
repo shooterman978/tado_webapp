@@ -132,6 +132,7 @@ export function ScheduleScreen({
   const [schedule, setSchedule] = useState<ZoneSchedule | null>(null);
   const [quota, setQuota] = useState<CloudQuotaStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [cacheMiss, setCacheMiss] = useState(false);
   const [busy, setBusy] = useState(false);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [editing, setEditing] = useState<{
@@ -147,9 +148,11 @@ export function ScheduleScreen({
     [onQuotaChange],
   );
 
-  const load = useCallback(async () => {
+  /** Local disk cache only — never spends CloudQuota on room/schedule enter. */
+  const loadCache = useCallback(async () => {
     setBusy(true);
     setError(null);
+    setCacheMiss(false);
     try {
       const res = await fetchZoneSchedule(zone.id);
       setSchedule(res.schedule);
@@ -158,15 +161,21 @@ export function ScheduleScreen({
       if (err instanceof ApiError && err.quota) {
         applyQuota(err.quota);
       }
-      setError(err instanceof Error ? err.message : "Zeitplan laden fehlgeschlagen");
+      if (err instanceof ApiError && err.status === 404) {
+        setSchedule(null);
+        setCacheMiss(true);
+        setError(null);
+      } else {
+        setError(err instanceof Error ? err.message : "Zeitplan laden fehlgeschlagen");
+      }
     } finally {
       setBusy(false);
     }
   }, [zone.id, applyQuota]);
 
   useEffect(() => {
-    void load();
-  }, [load]);
+    void loadCache();
+  }, [loadCache]);
 
   const meta = schedule
     ? TIMETABLE_META[schedule.timetableType] ?? TIMETABLE_META.THREE_DAY
@@ -183,6 +192,7 @@ export function ScheduleScreen({
     }
     setBusy(true);
     setError(null);
+    setCacheMiss(false);
     try {
       const res = await syncZoneSchedule(zone.id);
       setSchedule(res.schedule);
@@ -195,6 +205,22 @@ export function ScheduleScreen({
     } finally {
       setBusy(false);
     }
+  }
+
+  function formatFetchedAt(iso: string | undefined): string {
+    if (!iso) {
+      return "noch nie aus der Cloud geladen";
+    }
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) {
+      return "unbekannt";
+    }
+    return d.toLocaleString("de-DE", {
+      day: "2-digit",
+      month: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
   }
 
   async function persistHomeDay(
@@ -334,8 +360,8 @@ export function ScheduleScreen({
 
       <h2 className="schedule__heading">Intelligenter Zeitplan</h2>
       <p className="schedule__note">
-        Änderungen werden in die Tado-Cloud geschrieben und erscheinen in der offiziellen App.
-        Ist/Soll bleibt lokal (HomeKit).
+        Anzeige aus lokalem Cache. Cloud-Abruf nur über den Sync-Button (zählt gegen das Tageslimit).
+        Speichern schreibt in die Tado-Cloud; Ist/Soll bleibt lokal (HomeKit).
       </p>
 
       <div className="schedule__toolbar">
@@ -349,6 +375,16 @@ export function ScheduleScreen({
         </button>
         <CloudQuotaBadge quota={quota} />
       </div>
+      <p className="schedule__synced" aria-live="polite">
+        Zeitplan zuletzt gesynct: {formatFetchedAt(schedule?.fetchedAt)}
+      </p>
+
+      {cacheMiss ? (
+        <p className="schedule__note" role="status">
+          Noch kein Cache für diesen Raum — tippe „Jetzt synchronisieren“, um den Zeitplan aus der
+          Cloud zu laden.
+        </p>
+      ) : null}
 
       {error ? (
         <p className="error-state" role="alert">
@@ -382,7 +418,7 @@ export function ScheduleScreen({
             </span>
           </button>
 
-          {!schedule && busy ? <p className="schedule__note">Lade Zeitplan …</p> : null}
+          {!schedule && busy ? <p className="schedule__note">Lade Cache …</p> : null}
 
           <ul className="schedule__days">
             {dayTypes.map((dayType) => {
@@ -478,7 +514,7 @@ export function ScheduleScreen({
                       <footer>
                         <span className="schedule__stub-actions">
                           {schedule?.fetchedAt
-                            ? `Stand ${new Date(schedule.fetchedAt).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" })}`
+                            ? `Cache ${formatFetchedAt(schedule.fetchedAt)}`
                             : ""}
                         </span>
                         <button
@@ -561,7 +597,11 @@ export function ScheduleScreen({
             </li>
           ) : (
             <li className="schedule__note">
-              {busy ? "Lade …" : "Kein Zeitplan geladen."}
+              {busy
+                ? "Lade Cache …"
+                : cacheMiss
+                  ? "Kein Cache — Sync-Button tippen."
+                  : "Kein Zeitplan geladen."}
             </li>
           )}
         </ul>

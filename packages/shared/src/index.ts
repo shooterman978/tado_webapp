@@ -177,6 +177,23 @@ export interface CloudStatus {
 }
 
 /**
+ * Home-level cloud sync status (metadata + openWindow).
+ * Schedules are cached per room and synced only on demand.
+ */
+export interface CloudSyncStatus {
+  linked: boolean;
+  /** Last successful home cloud sync (metadata ± openWindow). */
+  lastSyncedAt: string | null;
+  /** Configured auto-sync interval in hours (default 4). */
+  autoSyncHours: number;
+  /** True when lastSyncedAt is older than autoSyncHours (or never). */
+  autoSyncDue: boolean;
+  homeName: string | null;
+  /** Per-room schedule cache timestamps (room-zN → ISO). */
+  scheduleSyncedAt: Record<string, string>;
+}
+
+/**
  * Persistent daily budget for all Tado cloud HTTP calls
  * (metadata, schedule, openWindow, auth refresh, …).
  */
