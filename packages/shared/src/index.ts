@@ -32,11 +32,22 @@ export interface ZoneDevice {
 
 /**
  * What currently drives the room off the Smart Schedule baseline.
- * - none: follows schedule (or unknown idle)
- * - manual: user setpoint / PWA overlay
+ * - none: follows schedule (or unknown — see {@link followsSchedule})
+ * - manual: user setpoint / PWA overlay / inferred setpoint drift
  * - calendar: active CalendarOverride rule
  */
 export type ZoneOverlayControl = "none" | "manual" | "calendar";
+
+/**
+ * Why the room is not on the Smart Schedule baseline.
+ * - manual_overlay: local PWA/HAP overlay tracker
+ * - calendar: CalendarOverride
+ * - setpoint_mismatch: HAP setpoint ≠ cached schedule setpoint for “now”
+ */
+export type ZoneOffScheduleReason =
+  | "manual_overlay"
+  | "calendar"
+  | "setpoint_mismatch";
 
 /** Heating zone / room as seen by the PWA / API. */
 export interface Zone {
@@ -59,13 +70,23 @@ export interface Zone {
   calendarRuleName?: string | null;
   /** Active calendar rule id when overlayControl === "calendar". */
   calendarRuleId?: string | null;
+  /**
+   * True only when HAP setpoint matches the cached Smart Schedule setpoint
+   * for now (±tolerance) and no calendar override is active.
+   * Null when the schedule cache is missing (must not imply “on schedule”).
+   */
+  followsSchedule?: boolean | null;
+  /** Cached schedule setpoint for “now” (Home timetable), if known. */
+  scheduleTargetTempC?: number | null;
+  /** Why the room is off-schedule when {@link followsSchedule} is false. */
+  offScheduleReason?: ZoneOffScheduleReason | null;
   /** Heating power hint 0–100, if available. */
   heatingPowerPercent: number | null;
   /** Relative humidity 0–100, if a sensor is present. */
   humidityPercent?: number | null;
   /**
-   * True when the room appears to follow schedule (no local manual overlay).
-   * Not a full Smart Schedule — indicator only until a schedule source exists.
+   * Legacy alias: true when {@link followsSchedule} is true.
+   * Prefer followsSchedule — HAP alone cannot prove schedule compliance.
    */
   onSchedule?: boolean;
   /**

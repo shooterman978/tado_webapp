@@ -172,7 +172,10 @@ export function App() {
                 targetTempC: tempC,
                 overlayActive: tempC !== null,
                 onSchedule: false,
-                overlayControl: tempC !== null ? "manual" : "none",
+                followsSchedule: false,
+                overlayControl: tempC !== null ? ("manual" as const) : ("none" as const),
+                offScheduleReason:
+                  tempC !== null ? ("manual_overlay" as const) : null,
                 calendarRuleName: null,
                 calendarRuleId: null,
                 overlayEndsAt: null,
@@ -191,20 +194,30 @@ export function App() {
       }
       return {
         ...prev,
-        zones: prev.zones.map((z) =>
-          z.id === zoneId
-            ? {
-                ...z,
-                overlayActive: false,
-                onSchedule: z.targetTempC != null,
-                overlayControl: "none",
-                calendarRuleName: null,
-                calendarRuleId: null,
-                overlayEndsAt: null,
-                updatedAt: new Date().toISOString(),
-              }
-            : z,
-        ),
+        zones: prev.zones.map((z) => {
+          if (z.id !== zoneId) {
+            return z;
+          }
+          // Optimistic: move toward cached schedule target, but never claim
+          // followsSchedule — next zones poll re-compares HAP vs cache.
+          const nextTarget =
+            z.scheduleTargetTempC !== undefined && z.scheduleTargetTempC !== null
+              ? z.scheduleTargetTempC
+              : z.targetTempC;
+          return {
+            ...z,
+            targetTempC: nextTarget,
+            overlayActive: false,
+            onSchedule: false,
+            followsSchedule: null,
+            overlayControl: "none" as const,
+            offScheduleReason: null,
+            calendarRuleName: null,
+            calendarRuleId: null,
+            overlayEndsAt: null,
+            updatedAt: new Date().toISOString(),
+          };
+        }),
       };
     });
   }

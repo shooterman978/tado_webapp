@@ -749,8 +749,21 @@ input {
   display: flex;
   align-items: center;
   gap: 0.45rem;
+  min-width: 0;
   font-size: 0.9rem;
   font-weight: 600;
+}
+
+.room-detail__footer-icon {
+  flex-shrink: 0;
+  width: 1.15rem;
+  height: 1.15rem;
+}
+
+.room-detail__footer-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .room-detail__edit {
