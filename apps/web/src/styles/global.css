@@ -1,0 +1,254 @@
+:root {
+  --bg-deep: #0e1311;
+  --bg: #121816;
+  --bg-elevated: #1a2420;
+  --ink: #e8efe9;
+  --ink-muted: #9aada3;
+  --ember: #e07a3d;
+  --ember-soft: #c4a574;
+  --line: rgba(232, 239, 233, 0.08);
+  --heat: #d4652f;
+  --cool: #6b8f86;
+  --radius: 2px;
+  --font-brand: "Syne", system-ui, sans-serif;
+  --font-body: "Figtree", system-ui, sans-serif;
+  --space: clamp(1rem, 3vw, 1.75rem);
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-body);
+  font-size: 1rem;
+  line-height: 1.45;
+  color: var(--ink);
+  background:
+    radial-gradient(120% 80% at 10% -10%, rgba(224, 122, 61, 0.14), transparent 55%),
+    radial-gradient(90% 60% at 100% 0%, rgba(107, 143, 134, 0.12), transparent 50%),
+    linear-gradient(180deg, var(--bg-deep) 0%, var(--bg) 40%, #15201c 100%);
+  background-attachment: fixed;
+  -webkit-font-smoothing: antialiased;
+}
+
+button,
+input {
+  font: inherit;
+}
+
+a {
+  color: var(--ember-soft);
+}
+
+.app-shell {
+  width: min(42rem, 100%);
+  margin: 0 auto;
+  padding: var(--space);
+  padding-bottom: calc(var(--space) + env(safe-area-inset-bottom, 0px));
+}
+
+.brand-bar {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 2rem;
+  animation: rise 0.7s ease-out both;
+}
+
+.brand {
+  font-family: var(--font-brand);
+  font-weight: 800;
+  font-size: clamp(1.75rem, 5vw, 2.25rem);
+  letter-spacing: -0.03em;
+  line-height: 1;
+  margin: 0;
+}
+
+.brand span {
+  color: var(--ember);
+}
+
+.brand-meta {
+  font-size: 0.8rem;
+  color: var(--ink-muted);
+  text-align: right;
+}
+
+.hero-line {
+  margin: 0 0 0.35rem;
+  font-family: var(--font-brand);
+  font-weight: 700;
+  font-size: clamp(1.15rem, 3.2vw, 1.4rem);
+  letter-spacing: -0.02em;
+  animation: rise 0.75s ease-out 0.08s both;
+}
+
+.hero-sub {
+  margin: 0 0 1.75rem;
+  color: var(--ink-muted);
+  max-width: 28rem;
+  animation: rise 0.75s ease-out 0.14s both;
+}
+
+.status-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem 1.25rem;
+  padding: 0.75rem 0;
+  margin-bottom: 1.5rem;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  font-size: 0.85rem;
+  color: var(--ink-muted);
+  animation: rise 0.8s ease-out 0.18s both;
+}
+
+.status-strip strong {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.zone-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.zone-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0.5rem 1rem;
+  align-items: end;
+  padding: 1.15rem 0;
+  border-bottom: 1px solid var(--line);
+  animation: rise 0.7s ease-out both;
+}
+
+.zone-row:nth-child(1) {
+  animation-delay: 0.22s;
+}
+.zone-row:nth-child(2) {
+  animation-delay: 0.3s;
+}
+.zone-row:nth-child(3) {
+  animation-delay: 0.38s;
+}
+.zone-row:nth-child(n + 4) {
+  animation-delay: 0.44s;
+}
+
+.zone-name {
+  font-family: var(--font-brand);
+  font-weight: 700;
+  font-size: 1.2rem;
+  letter-spacing: -0.02em;
+  margin: 0;
+}
+
+.zone-meta {
+  margin: 0.2rem 0 0;
+  font-size: 0.85rem;
+  color: var(--ink-muted);
+}
+
+.zone-temps {
+  text-align: right;
+}
+
+.temp-current {
+  font-family: var(--font-brand);
+  font-weight: 700;
+  font-size: 1.85rem;
+  letter-spacing: -0.04em;
+  line-height: 1;
+}
+
+.temp-current small {
+  font-size: 0.95rem;
+  color: var(--ink-muted);
+  font-weight: 600;
+}
+
+.temp-target {
+  margin-top: 0.25rem;
+  font-size: 0.85rem;
+  color: var(--ember-soft);
+}
+
+.heat-bar {
+  grid-column: 1 / -1;
+  height: 3px;
+  margin-top: 0.65rem;
+  background: rgba(232, 239, 233, 0.06);
+  overflow: hidden;
+}
+
+.heat-bar > span {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, var(--cool), var(--heat));
+  transform-origin: left;
+  animation: fill 1.1s ease-out both;
+}
+
+.empty-state,
+.error-state {
+  padding: 2rem 0;
+  color: var(--ink-muted);
+  animation: rise 0.6s ease-out both;
+}
+
+.error-state {
+  color: #e8a090;
+}
+
+.footer-note {
+  margin-top: 2.5rem;
+  font-size: 0.8rem;
+  color: var(--ink-muted);
+  border-top: 1px solid var(--line);
+  padding-top: 1rem;
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fill {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+}

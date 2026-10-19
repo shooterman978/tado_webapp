@@ -1,0 +1,25 @@
+# Prod overlay — Proxmox LXC with Docker Compose.
+# Usage: docker compose -f docker-compose.yml -f compose.prod.yml up -d --build
+#
+# Recommendations:
+# - Place stack behind Caddy/Traefik on a LAN hostname (e.g. heizung.lan).
+# - Keep DB unpublished; restrict CT firewall to LAN/VPN.
+# - Mount/back up volume heizplan_bridge (pairing state).
+# - Bridge container/host must reach the Tado V3 Internet Bridge (same LAN).
+# - Before first HAP pair: delete Spike-TadoLocal CT; no Apple Home / HA HomeKit.
+
+services:
+  api:
+    environment:
+      NODE_ENV: production
+      # Flip to false once a real BridgeClient is paired:
+      BRIDGE_USE_MOCK_ZONES: ${BRIDGE_USE_MOCK_ZONES:-false}
+    # Publish only if no reverse proxy yet — prefer proxy on 443.
+    ports:
+      - "3080:3080"
+
+  web:
+    ports:
+      - "80:80"
+
+  # Optional: add a `proxy` service (Caddy) here later for TLS.

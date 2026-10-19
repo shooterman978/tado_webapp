@@ -1,0 +1,70 @@
+# Heizplan — shared base for WSL (Dev) and Proxmox LXC (Prod).
+# Same images; overlay with compose.dev.yml or compose.prod.yml as needed.
+#
+# Dev (WSL / Docker Desktop):
+#   cp .env.example .env
+#   docker compose -f docker-compose.yml -f compose.dev.yml up --build
+#
+# Prod (Proxmox LXC):
+#   docker compose -f docker-compose.yml -f compose.prod.yml up -d --build
+#
+# Does NOT include: Home Assistant, TadoLocal.
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: heizplan
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-heizplan}
+      POSTGRES_DB: heizplan
+    volumes:
+      - heizplan_pg:/var/lib/postgresql/data
+    networks:
+      - heizplan
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U heizplan -d heizplan"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    # No host publish by default — API reaches DB on the internal network.
+    restart: unless-stopped
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    environment:
+      NODE_ENV: ${NODE_ENV:-production}
+      API_HOST: 0.0.0.0
+      API_PORT: "3080"
+      APP_VERSION: "0.1.0"
+      BRIDGE_DATA_DIR: /data/bridge
+      BRIDGE_USE_MOCK_ZONES: ${BRIDGE_USE_MOCK_ZONES:-true}
+      DATABASE_URL: postgres://heizplan:${POSTGRES_PASSWORD:-heizplan}@db:5432/heizplan
+      APP_SESSION_SECRET: ${APP_SESSION_SECRET:-change-me-to-a-long-random-string}
+    volumes:
+      - heizplan_bridge:/data/bridge
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - heizplan
+    restart: unless-stopped
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+    depends_on:
+      - api
+    networks:
+      - heizplan
+    restart: unless-stopped
+
+volumes:
+  heizplan_pg:
+  heizplan_bridge:
+
+networks:
+  heizplan:
+    driver: bridge

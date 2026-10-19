@@ -1,0 +1,18 @@
+{
+  "name": "tado-webapp",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Eigener Stack: lokale Tado-V3-Bridge, API und PWA (kein TadoLocal)",
+  "packageManager": "pnpm@9.15.0",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "pnpm -r --parallel --filter @heizplan/api --filter @heizplan/web run dev",
+    "dev:api": "pnpm --filter @heizplan/api run dev",
+    "dev:web": "pnpm --filter @heizplan/web run dev",
+    "build": "pnpm -r run build",
+    "typecheck": "pnpm -r run typecheck",
+    "lint": "pnpm -r run lint"
+  }
+}

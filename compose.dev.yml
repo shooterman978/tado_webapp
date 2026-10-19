@@ -1,0 +1,25 @@
+# Dev overlay — Docker Desktop under WSL.
+# Usage: docker compose -f docker-compose.yml -f compose.dev.yml up --build
+#
+# Notes:
+# - Publishes web/api on localhost for browser work.
+# - Host networking / mDNS for real HomeKit pairing is often awkward under
+#   Docker Desktop NAT. Prefer pairing validation on Proxmox LAN later.
+# - DB stays internal; optional publish uncommented below for GUI tools.
+
+services:
+  api:
+    environment:
+      NODE_ENV: development
+      BRIDGE_USE_MOCK_ZONES: "true"
+    ports:
+      - "3080:3080"
+
+  web:
+    ports:
+      - "8080:80"
+
+  # Optional local DB tooling:
+  # db:
+  #   ports:
+  #     - "5432:5432"
