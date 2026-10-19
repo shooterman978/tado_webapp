@@ -331,12 +331,12 @@ export function SettingsScreen({
           unavailableReason={quotaUnavailable}
         />
         <p className="settings__hint settings__hint--inline">
-          Zählt alle Cloud-HTTP-Calls (Metadaten, Schedule, openWindow, Auth). Reset Mitternacht
+          Zählt alle Anfragen an die Tado-Cloud (Namen, Zeitplan, Fenster). Reset Mitternacht
           Europe/Berlin
           {quota
             ? ` · ${new Date(quota.resetsAt).toLocaleString("de-DE", { timeZone: "Europe/Berlin" })}`
             : ""}
-          . Unabhängig von Cloud-Login (Zähler lokal). Endpoint: GET /api/cloud/quota.
+          .
         </p>
         {quota ? (
           <p className="settings-row__meta settings-quota-line">{formatQuotaLabel(quota)}</p>

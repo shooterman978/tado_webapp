@@ -283,13 +283,17 @@ export function App() {
     <div className="app-shell app-shell--nav">
       {tab === "home" ? (
         <>
-          <a className="promo-banner" href="#skills-stub">
+          <button
+            type="button"
+            className="promo-banner"
+            onClick={() => setOverlay({ kind: "calendar-rules" })}
+          >
             <span className="promo-banner__badge" aria-hidden="true">
               A
             </span>
             <span>Lass uns dein Zuhause vorwärmen</span>
             <span aria-hidden="true">→</span>
-          </a>
+          </button>
 
           <header className="home-header">
             <button type="button" className="home-header__name">

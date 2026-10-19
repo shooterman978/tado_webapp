@@ -106,28 +106,6 @@ export function RoomDetail({
 
   /** Disk-only sync stamps — opening a room must not hit Tado cloud. */
   useEffect(() => {
-    // Prefer hint from zone poll (already learned); refresh via API as fallback.
-    if (
-      zone.heatupHint?.recommendedStartAt &&
-      zone.heatupHint.estimatedMinutes != null
-    ) {
-      setHeatup({
-        roomId: zone.id,
-        targetTempC: zone.targetTempC ?? 22,
-        currentTempC: zone.currentTempC,
-        outdoorTempC: zone.heatupHint.outdoorTempC,
-        outdoorProvider: null,
-        estimatedMinutes: zone.heatupHint.estimatedMinutes,
-        recommendedStartAt: zone.heatupHint.recommendedStartAt,
-        readyAt: new Date().toISOString(),
-        confidence: zone.heatupHint.sampleCount >= 7 ? "high" : "medium",
-        method: zone.heatupHint.method,
-        sampleCount: zone.heatupHint.sampleCount,
-        message: zone.heatupHint.message,
-      });
-      return;
-    }
-
     let cancelled = false;
     void fetchCloudSyncStatus()
       .then((s) => {

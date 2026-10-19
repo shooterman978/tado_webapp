@@ -13,6 +13,7 @@ import type {
   Zone,
 } from "@heizplan/shared";
 import { config } from "../../config.js";
+import { loadZoneMetadata } from "../cloud/store.js";
 import { observeZoneHeatup, type ObserveResult } from "./capture.js";
 // ObserveResult re-exported via observeRoom return type
 import { HEATUP_DEFAULTS } from "./defaults.js";
@@ -214,23 +215,44 @@ export async function seedFixtures(roomId = "zone-bath"): Promise<{
 }
 
 /**
- * Optional boot seed: if HEATUP_SEED_ON_BOOT and no ok samples for zone-bath,
- * load fixtures so room-detail shows a tip immediately.
+ * Resolve live room ids for fixture seed (cloud metadata → room-zN).
+ * Falls back to mock id `zone-bath` when nothing is linked yet.
+ */
+async function resolveSeedRoomIds(): Promise<string[]> {
+  const meta = await loadZoneMetadata(dataDir());
+  if (meta) {
+    const ids = [
+      ...new Set(
+        Object.values(meta.devices).map((d) => `room-z${d.zoneId}`),
+      ),
+    ].filter((id) => id.length > 0);
+    if (ids.length > 0) {
+      return ids;
+    }
+  }
+  return ["zone-bath"];
+}
+
+/**
+ * Optional boot seed: if HEATUP_SEED_ON_BOOT and a room lacks ok samples,
+ * load fixtures so room-detail can show a tip (live rooms use room-zN, not zone-bath).
  */
 export async function maybeSeedOnBoot(): Promise<void> {
   if (!config.heatupEnabled || !config.heatupSeedOnBoot) {
     return;
   }
-  const roomId = "zone-bath";
-  const samples = await listSamplesForRoom(dataDir(), roomId);
-  const ok = samples.filter((s) => s.quality === "ok");
-  if (ok.length >= config.heatupMinSamplesForUi) {
-    return;
+  const roomIds = await resolveSeedRoomIds();
+  for (const roomId of roomIds) {
+    const samples = await listSamplesForRoom(dataDir(), roomId);
+    const ok = samples.filter((s) => s.quality === "ok");
+    if (ok.length >= config.heatupMinSamplesForUi) {
+      continue;
+    }
+    const result = await seedFixtures(roomId);
+    console.info(
+      `[heatup] seeded ${result.sampleCount} fixture samples for ${roomId}`,
+    );
   }
-  const result = await seedFixtures(roomId);
-  console.info(
-    `[heatup] seeded ${result.sampleCount} fixture samples for ${roomId}`,
-  );
 }
 
 

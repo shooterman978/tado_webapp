@@ -88,7 +88,8 @@ export const config = {
   /** Outdoor cache TTL (ms). Default 10 minutes. */
   outdoorTtlMs: envNumber("OUTDOOR_TTL_MS", 600_000),
   /**
-   * Seed fixture samples for zone-bath on boot when no ok samples exist.
+   * Seed fixture samples for live room-zN ids (from cloud metadata) on boot
+   * when a room has too few ok samples. Falls back to zone-bath in mock-only.
    * Useful for UI smoke without waiting for real heat-ups.
    */
   heatupSeedOnBoot: env("HEATUP_SEED_ON_BOOT", "false") === "true",

@@ -14,7 +14,7 @@
   --space: clamp(0.9rem, 3vw, 1.25rem);
   --radius: 1.1rem;
   /* Icon + label + home-indicator clearance. */
-  --nav-h: 4.75rem;
+  --nav-h: 5.25rem;
   --ease: cubic-bezier(0.22, 1, 0.36, 1);
 }
 
@@ -52,7 +52,7 @@ input {
   min-height: 100dvh;
   padding: var(--space);
   /* Last tile row must clear the fixed bottom nav (incl. home indicator). */
-  padding-bottom: calc(var(--nav-h) + env(safe-area-inset-bottom, 0px) + 2rem);
+  padding-bottom: calc(var(--nav-h) + env(safe-area-inset-bottom, 0px) + 2.75rem);
   background: var(--bg);
 }
 
@@ -71,14 +71,18 @@ input {
   display: flex;
   align-items: center;
   gap: 0.55rem;
+  width: 100%;
   margin: 0 0 0.55rem;
   padding: 0.45rem 0.7rem;
+  border: none;
   border-radius: 999px;
   background: #13261c;
   color: #d7f5e4;
+  text-align: left;
   text-decoration: none;
   font-size: 0.82rem;
   font-weight: 600;
+  cursor: pointer;
   animation: rise 0.45s var(--ease) both;
 }
 
@@ -292,7 +296,7 @@ input {
 
 .room-grid {
   list-style: none;
-  margin: 0 0 0.75rem;
+  margin: 0 0 1.25rem;
   padding: 0;
   display: grid;
   grid-template-columns: 1fr 1fr;
