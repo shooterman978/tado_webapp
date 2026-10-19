@@ -17,11 +17,9 @@ import {
   formatTemp,
   heatMode,
   isActivelyHeating,
-  overlayDurationLabel,
 } from "../lib/zoneDisplay";
 import {
   CloseIcon,
-  HandIcon,
   HeatWavesIcon,
   PencilIcon,
   PowerIcon,
@@ -58,19 +56,25 @@ function tempFromY(clientY: number, rect: DOMRect): number {
   return Math.round(Math.min(MAX_T, Math.max(MIN_T, raw)) * 2) / 2;
 }
 
-function footerManualLabel(zone: Zone): string {
-  return overlayDurationLabel(zone) ?? "Bis du den Zeitplan fortsetzt";
+/** True when room is off the Smart Schedule (manual or calendar). */
+function isOverrideActive(zone: Zone): boolean {
+  return (
+    zone.overlayControl === "manual" ||
+    zone.overlayControl === "calendar" ||
+    zone.overlayActive === true
+  );
 }
 
 function footerStatusLabel(zone: Zone, off: boolean): string {
-  if (zone.overlayActive) {
-    return footerManualLabel(zone);
+  if (zone.overlayControl === "calendar" || (zone.overlayActive && zone.calendarRuleName)) {
+    const rule = zone.calendarRuleName?.trim();
+    return rule ? `Terminsteuerung · ${rule}` : "Terminsteuerung";
+  }
+  if (zone.overlayControl === "manual" || zone.overlayActive) {
+    return "Manuelle Überschreibung";
   }
   if (off) {
     return "Aus / Frostschutz";
-  }
-  if (zone.onSchedule) {
-    return "Folgt dem Zeitplan";
   }
   return "Folgt dem Zeitplan";
 }
@@ -207,6 +211,7 @@ export function RoomDetail({
 
   const off = heatMode(zone) === "off";
   const heating = isActivelyHeating(zone);
+  const overrideActive = isOverrideActive(zone);
   const fillPct = Math.min(100, Math.max(8, ((draft - MIN_T) / (MAX_T - MIN_T)) * 100));
   const bg = detailBackground(zone);
 
@@ -233,7 +238,7 @@ export function RoomDetail({
   }
 
   async function resume(): Promise<void> {
-    if (!interactive || !zone.overlayActive) {
+    if (!interactive || !overrideActive) {
       return;
     }
     setBusy(true);
@@ -441,29 +446,22 @@ export function RoomDetail({
       </div>
 
       <div className="room-detail__bottom">
-        <button
-          type="button"
-          className={[
-            "room-detail__resume",
-            !zone.overlayActive ? "is-idle" : "",
-          ]
-            .filter(Boolean)
-            .join(" ")}
-          disabled={busy || !interactive || !zone.overlayActive}
-          aria-label={
-            zone.overlayActive
-              ? "Zeitplan fortsetzen"
-              : "Zeitplan läuft bereits"
-          }
-          onClick={() => void resume()}
-        >
-          <ScheduleResumeIcon />
-          {zone.overlayActive ? "Zeitplan fortsetzen" : "Zeitplan aktiv"}
-        </button>
+        {overrideActive ? (
+          <button
+            type="button"
+            className="room-detail__resume"
+            disabled={busy || !interactive}
+            aria-label="Zeitplan fortsetzen"
+            onClick={() => void resume()}
+          >
+            <ScheduleResumeIcon />
+            Zeitplan fortsetzen
+          </button>
+        ) : null}
 
         <footer className="room-detail__footer">
           <div className="room-detail__footer-main">
-            {zone.overlayActive ? <HandIcon /> : <ScheduleIcon />}
+            {!overrideActive ? <ScheduleIcon /> : null}
             <span>{footerStatusLabel(zone, off)}</span>
           </div>
           <button

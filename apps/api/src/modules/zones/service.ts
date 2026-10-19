@@ -7,6 +7,10 @@
 import type { OpenWindowSettings, Zone, ZonesResponse } from "@heizplan/shared";
 import { config } from "../../config.js";
 import { getBridgeClient, getHapBridgeClient } from "../bridge/service.js";
+import {
+  clearActiveOverrideForRoom,
+  loadActiveOverrides,
+} from "../calendar/store.js";
 import { getCachedZoneMetadata, getCloudStatus } from "../cloud/service.js";
 import { loadRoomMap } from "../cloud/store.js";
 import {
@@ -20,6 +24,7 @@ import {
   saveOpenWindowSettings,
   setWindowOverride,
 } from "./open-window.js";
+import { enrichZonesWithOverlayControl } from "./overlay-control.js";
 import {
   applyOverlayHints,
   clearOverlayRecord,
@@ -29,6 +34,8 @@ import {
   attachHeatupHints,
   observeAllZonesHeatup,
 } from "../heatup/observe-all.js";
+
+export { enrichZonesWithOverlayControl } from "./overlay-control.js";
 
 /** Mutable fixture state for unpaired UI / open-window smoke. */
 const MOCK_ZONE_STATE = new Map<string, Partial<Zone>>();
@@ -281,7 +288,9 @@ async function finishZones(
   // Capture heat-up samples from live (or mock-ramped) snapshots.
   await observeAllZonesHeatup(afterAuto);
   const withHints = await attachHeatupHints(afterAuto);
-  return { zones: withHints, source, naming, presence };
+  const activeCalendar = await loadActiveOverrides(config.bridgeDataDir);
+  const withControl = enrichZonesWithOverlayControl(withHints, activeCalendar);
+  return { zones: withControl, source, naming, presence };
 }
 
 export async function listZones(): Promise<ZonesResponse> {
@@ -403,10 +412,24 @@ export async function setZoneTemperature(
   });
 }
 
-export async function clearZoneOverlay(zoneId: string): Promise<void> {
+export async function clearZoneOverlay(
+  zoneId: string,
+  opts?: { skipCalendarClear?: boolean },
+): Promise<void> {
   const bridge = getBridgeClient();
   const status = await bridge.getStatus();
   clearOverlayRecord(zoneId);
+
+  if (!opts?.skipCalendarClear) {
+    try {
+      await clearActiveOverrideForRoom(config.bridgeDataDir, zoneId);
+    } catch (err) {
+      console.warn(
+        "[zones] clear calendar override failed:",
+        err instanceof Error ? err.message : err,
+      );
+    }
+  }
 
   if (!status.paired && config.useMockZones) {
     const prev = MOCK_ZONE_STATE.get(zoneId) ?? {};
@@ -414,6 +437,9 @@ export async function clearZoneOverlay(zoneId: string): Promise<void> {
       ...prev,
       overlayActive: false,
       onSchedule: true,
+      overlayControl: "none",
+      calendarRuleName: null,
+      calendarRuleId: null,
       targetTempC: prev.targetTempC ?? 20,
     });
     return;
