@@ -1562,6 +1562,24 @@ input {
   cursor: pointer;
 }
 
+.settings-group--feature {
+  outline: 1px solid color-mix(in srgb, #c0392b 45%, transparent);
+}
+
+.settings-row--feature {
+  min-height: 3.6rem;
+}
+
+.settings-row__sub {
+  display: block;
+  margin-top: 0.15rem;
+  font-size: 0.72rem;
+  font-weight: 500;
+  color: var(--ink-muted, #9a9a9a);
+  letter-spacing: 0;
+  text-transform: none;
+}
+
 .schedule__sync--secondary {
   background: transparent;
   border: 1px solid color-mix(in srgb, var(--accent, #e67e22) 55%, transparent);

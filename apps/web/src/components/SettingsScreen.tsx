@@ -138,6 +138,26 @@ export function SettingsScreen({
     <div className="settings">
       <h1 className="settings__title">Einstellungen</h1>
 
+      <p className="settings__section-label">Kalenderregeln</p>
+      <div className="settings-group settings-group--feature">
+        <button
+          type="button"
+          className="settings-row settings-row--button settings-row--feature"
+          onClick={onOpenCalendarRules}
+          aria-label="Kalenderregeln öffnen"
+        >
+          <span className="settings-row__circle" style={{ background: "#c0392b" }} aria-hidden="true">
+            K
+          </span>
+          <span className="settings-row__label">
+            Kalenderregeln
+            <small className="settings-row__sub">iPhone / iCloud · Zeitplan überschreiben</small>
+          </span>
+          <span className="settings-row__meta">Öffnen</span>
+          <ChevronIcon className="settings-row__chev" />
+        </button>
+      </div>
+
       <p className="settings__section-label">Zuhause</p>
       <div className="settings-group">
         <Row label="Räume & Geräte" glyph="R" />
@@ -163,25 +183,6 @@ export function SettingsScreen({
       <p className="settings__section-label">Cloud / Raumnamen</p>
       <div className="settings-group settings-group--quota">
         <CloudLinkPanel naming={zones?.naming} onLinked={onZonesRefresh} />
-      </div>
-
-      <p className="settings__section-label">Kalenderregeln</p>
-      <div className="settings-group settings-group--quota">
-        <button
-          type="button"
-          className="settings-row settings-row--button"
-          onClick={onOpenCalendarRules}
-        >
-          <span className="settings-row__circle" style={{ background: "#c0392b" }} aria-hidden="true">
-            K
-          </span>
-          <span className="settings-row__label">iCloud / Regeln verwalten</span>
-          <ChevronIcon className="settings-row__chev" />
-        </button>
-        <p className="settings__hint settings__hint--inline">
-          Event-Match (z. B. Titel enthält „Büro“) überschreibt den Tado-Zeitplan per HAP-Overlay.
-          Cloud-Writes nur wenn nötig und Quota übrig.
-        </p>
       </div>
 
       <p className="settings__section-label">Cloud-Quota</p>

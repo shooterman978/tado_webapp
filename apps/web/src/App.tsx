@@ -330,7 +330,9 @@ export function App() {
         />
       ) : null}
 
-      {tab === "more" ? <MoreScreen /> : null}
+      {tab === "more" ? (
+        <MoreScreen onOpenCalendarRules={() => setOverlay({ kind: "calendar-rules" })} />
+      ) : null}
 
       <BottomNav active={tab} onChange={setTab} />
     </div>
