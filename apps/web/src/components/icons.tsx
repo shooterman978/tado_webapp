@@ -129,3 +129,15 @@ export function ChevronDownIcon({ className }: IconProps) {
     </svg>
   );
 }
+
+export function WindowIcon({ className, title = "Fenster offen" }: IconProps) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" width="1em" height="1em" aria-hidden={title ? undefined : true}>
+      {title ? <title>{title}</title> : null}
+      <path
+        fill="currentColor"
+        d="M4 3a1 1 0 0 1 1-1h14a1 1 0 0 1 1 1v18a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V3zm2 1v7h5V4H6zm7 0v7h5V4h-5zM6 13v7h5v-7H6zm7 0v7h5v-7h-5z"
+      />
+    </svg>
+  );
+}

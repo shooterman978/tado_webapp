@@ -79,4 +79,12 @@ export interface BridgeClient {
 
   /** Set heating power mode: heat or off (frost). Optional on implementations. */
   setPowerMode?(zoneId: string, mode: "heat" | "off"): Promise<void>;
+
+  /**
+   * Optional diagnostic dump of HAP services/characteristics.
+   * Used to verify whether ContactSensor / window state is exposed.
+   */
+  describeHapCapabilities?(): Promise<
+    import("@heizplan/shared").HapCapabilitiesReport
+  >;
 }

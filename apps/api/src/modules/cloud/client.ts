@@ -262,3 +262,38 @@ export async function fetchZoneMetadata(
     devices,
   };
 }
+
+interface CloudZoneState {
+  openWindowDetected?: boolean | null;
+  openWindow?: unknown;
+}
+
+interface CloudZoneStatesResponse {
+  zoneStates?: Record<string, CloudZoneState>;
+}
+
+/**
+ * Optional read of cloud open-window flags (detection only — control stays local).
+ * Maps cloud zoneId → open (true when openWindowDetected or openWindow present).
+ */
+export async function fetchOpenWindowByZoneId(
+  accessToken: string,
+  homeId: number,
+): Promise<Record<number, boolean>> {
+  const payload = await apiGet<CloudZoneStatesResponse>(
+    accessToken,
+    `/homes/${homeId}/zoneStates`,
+  );
+  const out: Record<number, boolean> = {};
+  for (const [id, state] of Object.entries(payload.zoneStates ?? {})) {
+    const zoneId = Number(id);
+    if (!Number.isFinite(zoneId)) {
+      continue;
+    }
+    const detected =
+      state?.openWindowDetected === true ||
+      (state?.openWindow != null && state.openWindow !== false);
+    out[zoneId] = detected;
+  }
+  return out;
+}

@@ -12,7 +12,11 @@
  */
 
 import { createRequire } from "node:module";
-import type { BridgePairingState, Zone } from "@heizplan/shared";
+import type {
+  BridgePairingState,
+  HapCapabilitiesReport,
+  Zone,
+} from "@heizplan/shared";
 import type {
   BridgeClient,
   DiscoverOptions,
@@ -37,6 +41,9 @@ const { HttpClient, IPDiscovery, Characteristic, Service } = hap;
 const HEAT_MODE = 1;
 
 const THERMOSTAT_UUID = "0000004A-0000-1000-8000-0026BB765291";
+const CONTACT_SENSOR_UUID = "00000080-0000-1000-8000-0026BB765291";
+/** ContactSensorState: 0 = contact (closed), 1 = no contact (open). */
+const CONTACT_OPEN = 1;
 
 export interface HapBridgeOptions {
   dataDir: string;
@@ -60,6 +67,8 @@ interface ThermostatRef {
   currentHeatIid: number;
   humidityIid: number;
   batteryLowIid: number;
+  /** ContactSensorState iid when a Contact Sensor service exists on the accessory. */
+  contactStateIid: number;
 }
 
 /** HomeKit TargetHeatingCoolingState: Off */
@@ -82,8 +91,26 @@ function isThermostatService(type: string): boolean {
   );
 }
 
+function isContactSensorService(type: string): boolean {
+  const name = Service.serviceFromUuid(type);
+  const n = String(name).toLowerCase();
+  return (
+    type.toUpperCase() === CONTACT_SENSOR_UUID ||
+    type.endsWith("80") ||
+    n.includes("contact")
+  );
+}
+
 function charName(type: string): string {
   return String(Characteristic.characteristicFromUuid(type)).toLowerCase();
+}
+
+function isContactStateChar(n: string): boolean {
+  return (
+    n.includes("contact-state") ||
+    n.includes("contactsensorstate") ||
+    n === "contact-state"
+  );
 }
 
 /**
@@ -355,10 +382,13 @@ export class HapBridgeClient implements BridgeClient {
       const aid = Number(accessory.aid);
       let humidityIid = -1;
       let batteryLowIid = -1;
+      let contactStateIid = -1;
       let accessoryName: string | null = null;
 
-      // Humidity / battery often live on sibling services of the same accessory.
+      // Humidity / battery / contact often live on sibling services.
       for (const service of accessory.services ?? []) {
+        const svcType = String(service.type);
+        const isContact = isContactSensorService(svcType);
         for (const ch of service.characteristics ?? []) {
           const n = charName(String(ch.type));
           const iid = Number(ch.iid);
@@ -366,6 +396,11 @@ export class HapBridgeClient implements BridgeClient {
             humidityIid = iid;
           } else if (n.includes("status-low-battery") || n.includes("statuslowbattery")) {
             batteryLowIid = iid;
+          } else if (isContact && isContactStateChar(n)) {
+            contactStateIid = iid;
+          } else if (isContactStateChar(n) && contactStateIid < 0) {
+            // Loose match if service UUID mapping is unknown.
+            contactStateIid = iid;
           } else if (
             n === "name" &&
             ch.value != null &&
@@ -416,11 +451,124 @@ export class HapBridgeClient implements BridgeClient {
           currentHeatIid,
           humidityIid,
           batteryLowIid,
+          contactStateIid,
         });
       }
     }
 
     return refs;
+  }
+
+  /**
+   * Diagnostic: dump services/chars the paired bridge exposes.
+   * Tado V3 typically: Thermostat + Humidity, no ContactSensor;
+   * proprietary write-only service E44673A0-… is present but not readable.
+   */
+  async describeHapCapabilities(): Promise<HapCapabilitiesReport> {
+    await this.init();
+    if (this.state !== "paired") {
+      return {
+        generatedAt: new Date().toISOString(),
+        paired: false,
+        accessoryCount: 0,
+        thermostatCount: 0,
+        contactSensorCount: 0,
+        note: "Bridge not paired — cannot dump HAP accessories.",
+        accessories: [],
+      };
+    }
+
+    const client = this.requireClient();
+    const db = await client.getAccessories();
+    let thermostatCount = 0;
+    let contactSensorCount = 0;
+    const accessories: HapCapabilitiesReport["accessories"] = [];
+
+    for (const accessory of db.accessories ?? []) {
+      const aid = Number(accessory.aid);
+      let name = `aid ${aid}`;
+      let hasThermostat = false;
+      let hasContactSensor = false;
+      let hasHumidity = false;
+      let proprietaryServiceCount = 0;
+      const services: HapCapabilitiesReport["accessories"][0]["services"] = [];
+
+      for (const service of accessory.services ?? []) {
+        const svcType = String(service.type);
+        const svcName = String(Service.serviceFromUuid(svcType));
+        if (isThermostatService(svcType)) {
+          hasThermostat = true;
+          thermostatCount += 1;
+        }
+        if (isContactSensorService(svcType)) {
+          hasContactSensor = true;
+          contactSensorCount += 1;
+        }
+        if (!String(svcName).startsWith("public.hap")) {
+          proprietaryServiceCount += 1;
+        }
+
+        const characteristics = (service.characteristics ?? []).map(
+          (ch: {
+            iid?: number;
+            type?: string;
+            format?: string;
+            perms?: string[];
+            value?: unknown;
+          }) => {
+            const type = String(ch.type ?? "");
+            const n = charName(type);
+            if (
+              n.includes("relative-humidity.current") ||
+              n === "currentrelativehumidity"
+            ) {
+              hasHumidity = true;
+            }
+            if (n === "name" && ch.value != null && name.startsWith("aid ")) {
+              name = String(ch.value);
+            }
+            return {
+              iid: Number(ch.iid),
+              type,
+              name: String(Characteristic.characteristicFromUuid(type)),
+              format: ch.format,
+              perms: ch.perms,
+              value: ch.value,
+            };
+          },
+        );
+        services.push({ type: svcType, name: svcName, characteristics });
+      }
+
+      accessories.push({
+        aid,
+        name,
+        services,
+        hasThermostat,
+        hasContactSensor,
+        hasHumidity,
+        proprietaryServiceCount,
+      });
+    }
+
+    const note =
+      contactSensorCount === 0
+        ? "No ContactSensor / contact-state on this V3 Bridge. Open-window is not exposed via readable HAP (proprietary E44673A0… is write-only). Use fixture/manual override or optional cloud openWindowDetected."
+        : "ContactSensor present — windowOpen mapped from contact-state (1 = open).";
+
+    console.info(
+      `[hap] capabilities: ${accessories.length} accessories, ${thermostatCount} thermostats, ${contactSensorCount} contact sensors`,
+    );
+
+    return {
+      generatedAt: new Date().toISOString(),
+      paired: true,
+      accessoryCount: accessories.length,
+      thermostatCount,
+      contactSensorCount,
+      note,
+      accessories,
+    };
   }
 
   async listZones(): Promise<Zone[]> {
@@ -450,6 +598,9 @@ export class HapBridgeClient implements BridgeClient {
       }
       if (ref.batteryLowIid >= 0) {
         ids.push(`${ref.aid}.${ref.batteryLowIid}`);
+      }
+      if (ref.contactStateIid >= 0) {
+        ids.push(`${ref.aid}.${ref.contactStateIid}`);
       }
     }
 
@@ -481,6 +632,13 @@ export class HapBridgeClient implements BridgeClient {
         ref.batteryLowIid >= 0
           ? Number(byKey.get(`${ref.aid}.${ref.batteryLowIid}`))
           : NaN;
+      const contactRaw =
+        ref.contactStateIid >= 0
+          ? Number(byKey.get(`${ref.aid}.${ref.contactStateIid}`))
+          : NaN;
+      const windowOpen = Number.isFinite(contactRaw)
+        ? contactRaw === CONTACT_OPEN
+        : null;
       const heating = heatTarget === HEAT_MODE;
       const serialMatch = ref.name.match(/\b([A-Z]{2}[A-Z0-9]*\d{4,})\b/i);
 
@@ -494,6 +652,8 @@ export class HapBridgeClient implements BridgeClient {
         heatingPowerPercent:
           heatCurrent === HEAT_MODE ? 100 : heatCurrent > 0 ? 50 : 0,
         humidityPercent: Number.isFinite(humidity) ? Math.round(humidity) : null,
+        windowOpen: windowOpen === true,
+        windowSource: windowOpen == null ? "none" : "hap",
         updatedAt: now,
         devices: [
           {
@@ -503,6 +663,7 @@ export class HapBridgeClient implements BridgeClient {
             batteryLow: Number.isFinite(batteryRaw) ? batteryRaw > 0 : null,
             currentTempC: Number.isFinite(current) ? current : null,
             targetTempC: heating && Number.isFinite(target) ? target : null,
+            windowOpen,
           },
         ],
       };

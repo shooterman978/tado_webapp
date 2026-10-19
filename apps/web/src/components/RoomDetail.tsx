@@ -7,6 +7,7 @@ import { useEffect, useRef, useState } from "react";
 import type { Zone } from "@heizplan/shared";
 import {
   clearZoneOverlay,
+  setZonePower,
   setZoneTemperature,
 } from "../api";
 import {
@@ -21,9 +22,11 @@ import {
   HandIcon,
   HeatWavesIcon,
   PencilIcon,
+  PowerIcon,
   ReportIcon,
   ScheduleIcon,
   ScheduleResumeIcon,
+  WindowIcon,
 } from "./icons";
 
 interface RoomDetailProps {
@@ -109,6 +112,24 @@ export function RoomDetail({
     }
   }
 
+  async function turnOffForWindow(): Promise<void> {
+    if (!interactive) {
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    onOptimisticTarget(zone.id, null);
+    try {
+      await setZonePower(zone.id, "off");
+      onChanged();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Ausschalten fehlgeschlagen");
+      onChanged();
+    } finally {
+      setBusy(false);
+    }
+  }
+
   function onPointer(clientY: number): void {
     const el = trackRef.current;
     if (!el) {
@@ -156,6 +177,31 @@ export function RoomDetail({
           </p>
         ) : null}
       </div>
+
+      {zone.windowOpen ? (
+        <div className="window-banner" role="status">
+          <WindowIcon className="window-banner__icon" />
+          <div className="window-banner__text">
+            <strong>Fenster offen</strong>
+            <span>
+              {zone.openWindowAutoOffActive
+                ? "Heizung lokal aus (Auto-Aus)."
+                : "Heizung bei Bedarf ausschalten — ohne Auto-Assist."}
+            </span>
+          </div>
+          {!off ? (
+            <button
+              type="button"
+              className="window-banner__action"
+              disabled={busy || !interactive}
+              onClick={() => void turnOffForWindow()}
+            >
+              <PowerIcon />
+              Heizung ausschalten
+            </button>
+          ) : null}
+        </div>
+      ) : null}
 
       <div className="room-detail__soll-row">
         <p className="room-detail__soll">

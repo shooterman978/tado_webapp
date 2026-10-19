@@ -10,7 +10,7 @@ import {
   splitTemp,
   tilePalette,
 } from "../lib/zoneDisplay";
-import { DropIcon, HandIcon } from "./icons";
+import { DropIcon, HandIcon, WindowIcon } from "./icons";
 
 interface RoomGridProps {
   zones: Zone[];
@@ -51,18 +51,27 @@ export function RoomGrid({ zones, showHumidity, onSelect }: RoomGridProps) {
                 "room-tile",
                 `room-tile--${palette.kind}`,
                 manual ? "room-tile--manual" : "",
+                zone.windowOpen ? "room-tile--window" : "",
               ]
                 .filter(Boolean)
                 .join(" ")}
               onClick={() => onSelect(zone.id)}
-              aria-label={`${zone.name}, Ist ${formatTemp(zone.currentTempC)} Grad`}
+              aria-label={`${zone.name}, Ist ${formatTemp(zone.currentTempC)} Grad${zone.windowOpen ? ", Fenster offen" : ""}`}
             >
-              {showHumidity && zone.humidityPercent != null ? (
-                <span className="room-tile__humidity">
-                  <DropIcon />
-                  {zone.humidityPercent}%
-                </span>
-              ) : null}
+              <div className="room-tile__badges">
+                {showHumidity && zone.humidityPercent != null ? (
+                  <span className="room-tile__humidity">
+                    <DropIcon />
+                    {zone.humidityPercent}%
+                  </span>
+                ) : null}
+                {zone.windowOpen ? (
+                  <span className="room-tile__window" title="Fenster offen">
+                    <WindowIcon />
+                    Offen
+                  </span>
+                ) : null}
+              </div>
 
               <p className="room-tile__current" aria-hidden="true">
                 <span className="room-tile__whole">{whole}</span>
@@ -81,7 +90,13 @@ export function RoomGrid({ zones, showHumidity, onSelect }: RoomGridProps) {
                 <h2 className="room-tile__name">{zone.name}</h2>
                 <p className="room-tile__set">
                   {manual ? <HandIcon className="room-tile__hand" /> : null}
-                  {off ? (
+                  {zone.windowOpen ? (
+                    <span>
+                      {zone.openWindowAutoOffActive || off
+                        ? "Fenster offen · Aus"
+                        : "Fenster offen"}
+                    </span>
+                  ) : off ? (
                     <span>Aus</span>
                   ) : (
                     <span>Eingestellt auf {formatTemp(zone.targetTempC)}°</span>

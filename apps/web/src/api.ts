@@ -1,4 +1,8 @@
-import type { HealthStatus, ZonesResponse } from "@heizplan/shared";
+import type {
+  HealthStatus,
+  OpenWindowSettings,
+  ZonesResponse,
+} from "@heizplan/shared";
 
 async function getJson<T>(path: string): Promise<T> {
   const res = await fetch(path, {
@@ -28,6 +32,24 @@ async function postJson(
     } | null;
     throw new Error(errBody?.message ?? `Aktion fehlgeschlagen (${res.status})`);
   }
+}
+
+async function putJson<T>(path: string, body: unknown): Promise<T> {
+  const res = await fetch(path, {
+    method: "PUT",
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const errBody = (await res.json().catch(() => null)) as {
+      message?: string;
+    } | null;
+    throw new Error(errBody?.message ?? `Speichern fehlgeschlagen (${res.status})`);
+  }
+  return res.json() as Promise<T>;
 }
 
 export function fetchHealth(): Promise<HealthStatus> {
@@ -64,4 +86,24 @@ export async function runQuickAction(
   action: "off" | "boost" | "resume",
 ): Promise<void> {
   await postJson(`/api/zones/quick-actions/${action}`);
+}
+
+export function fetchOpenWindowSettings(): Promise<OpenWindowSettings> {
+  return getJson<OpenWindowSettings>("/api/zones/settings/open-window");
+}
+
+export function saveOpenWindowSettings(
+  settings: Partial<OpenWindowSettings>,
+): Promise<OpenWindowSettings> {
+  return putJson<OpenWindowSettings>(
+    "/api/zones/settings/open-window",
+    settings,
+  );
+}
+
+export async function setZoneWindowOpen(
+  zoneId: string,
+  open: boolean,
+): Promise<void> {
+  await postJson(`/api/zones/${encodeURIComponent(zoneId)}/window`, { open });
 }

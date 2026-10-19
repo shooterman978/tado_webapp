@@ -37,7 +37,9 @@ export function createApp(): Hono {
       endpoints: [
         "/api/health",
         "/api/zones",
+        "/api/zones/settings/open-window",
         "/api/bridge/status",
+        "/api/bridge/hap-report",
         "/api/cloud/status",
       ],
     }),

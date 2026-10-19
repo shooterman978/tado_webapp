@@ -18,11 +18,17 @@ import {
   type ZoneMetadata,
 } from "./store.js";
 import {
+  fetchOpenWindowByZoneId,
   fetchZoneMetadata,
   pollDeviceAuth,
   refreshAccessToken,
   startDeviceAuth,
 } from "./client.js";
+
+let openWindowCache: {
+  expiresAt: number;
+  byZoneId: Record<number, boolean>;
+} | null = null;
 
 function dataDir(): string {
   return config.bridgeDataDir;
@@ -138,4 +144,36 @@ export async function unlinkCloud(): Promise<void> {
 
 export async function getCachedZoneMetadata(): Promise<ZoneMetadata | null> {
   return loadZoneMetadata(dataDir());
+}
+
+/**
+ * Best-effort cloud open-window map (cloud zone id → open).
+ * Cached ~30s. Empty when unlinked or on error — never throws to zones list.
+ */
+export async function getCloudOpenWindowByZoneId(): Promise<
+  Record<number, boolean>
+> {
+  const tokens = await loadCloudTokens(dataDir());
+  const meta = await loadZoneMetadata(dataDir());
+  if (!tokens || !meta?.homeId) {
+    return {};
+  }
+  if (openWindowCache && Date.now() < openWindowCache.expiresAt) {
+    return openWindowCache.byZoneId;
+  }
+  try {
+    const accessToken = await ensureAccessToken();
+    const byZoneId = await fetchOpenWindowByZoneId(accessToken, meta.homeId);
+    openWindowCache = {
+      expiresAt: Date.now() + 30_000,
+      byZoneId,
+    };
+    return byZoneId;
+  } catch (err) {
+    console.warn(
+      "[cloud] openWindow poll failed:",
+      err instanceof Error ? err.message : err,
+    );
+    return openWindowCache?.byZoneId ?? {};
+  }
 }

@@ -193,6 +193,12 @@ export function aggregateRooms(
     );
     const overlayActive = group.members.some((m) => m.overlayActive);
     const deviceList = group.members.map(toZoneDevice);
+    const hapWindowOpen = group.members.some(
+      (m) => m.windowOpen === true || m.devices?.some((d) => d.windowOpen === true),
+    );
+    const hapWindowKnown = group.members.some(
+      (m) => m.windowSource === "hap" || m.devices?.some((d) => d.windowOpen != null),
+    );
 
     zones.push({
       id: roomKey,
@@ -203,6 +209,8 @@ export function aggregateRooms(
       onSchedule: anyHeating && !overlayActive,
       heatingPowerPercent: powers.length ? Math.max(...powers) : null,
       humidityPercent: humidities.length ? Math.round(avg(humidities) ?? 0) : null,
+      windowOpen: hapWindowOpen,
+      windowSource: hapWindowKnown ? "hap" : "none",
       updatedAt: updatedAts.at(-1) ?? null,
       deviceIds: group.members.map((m) => m.id),
       deviceCount: group.members.length,

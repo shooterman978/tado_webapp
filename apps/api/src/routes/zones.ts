@@ -1,5 +1,5 @@
 /**
- * Zones REST — room overview, setpoint, power, overlay, quick actions.
+ * Zones REST — room overview, setpoint, power, overlay, quick actions, window.
  *
  * @package @heizplan/api
  */
@@ -7,12 +7,15 @@
 import { Hono } from "hono";
 import {
   clearZoneOverlay,
+  getOpenWindowSettings,
   listZones,
   quickActionAllOff,
   quickActionBoost,
   quickActionResumeSchedule,
   setZonePower,
   setZoneTemperature,
+  setZoneWindowOpen,
+  updateOpenWindowSettings,
 } from "../modules/zones/service.js";
 
 export const zonesRoutes = new Hono();
@@ -20,6 +23,27 @@ export const zonesRoutes = new Hono();
 zonesRoutes.get("/", async (c) => {
   const payload = await listZones();
   return c.json(payload);
+});
+
+/** Open-window auto-off settings (local, no paywall). */
+zonesRoutes.get("/settings/open-window", async (c) => {
+  const settings = await getOpenWindowSettings();
+  return c.json(settings);
+});
+
+zonesRoutes.put("/settings/open-window", async (c) => {
+  try {
+    const body = await c.req.json<{
+      globalAutoOff?: boolean;
+      resumeMode?: "restore_setpoint" | "clear_overlay";
+      rooms?: Record<string, { autoOff?: boolean }>;
+    }>();
+    const settings = await updateOpenWindowSettings(body ?? {});
+    return c.json(settings);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Invalid settings";
+    return c.json({ error: "invalid_settings", message }, 400);
+  }
 });
 
 /** Quick actions affecting all rooms — registered before :zoneId. */
@@ -116,5 +140,37 @@ zonesRoutes.post("/:zoneId/power", async (c) => {
     const message = err instanceof Error ? err.message : "Set power failed";
     const status = message.includes("not paired") ? 409 : 502;
     return c.json({ error: "set_power_failed", message }, status);
+  }
+});
+
+/**
+ * Manual / fixture open-window state for UI smoke when HAP has no ContactSensor.
+ * Body: `{ "open": boolean }`
+ */
+zonesRoutes.post("/:zoneId/window", async (c) => {
+  const zoneId = c.req.param("zoneId");
+  let open: boolean;
+  try {
+    const body = await c.req.json<{ open?: boolean }>();
+    if (typeof body?.open !== "boolean") {
+      return c.json(
+        { error: "invalid_body", message: "Expected JSON { open: boolean }" },
+        400,
+      );
+    }
+    open = body.open;
+  } catch {
+    return c.json(
+      { error: "invalid_body", message: "Expected JSON { open: boolean }" },
+      400,
+    );
+  }
+
+  try {
+    await setZoneWindowOpen(zoneId, open);
+    return c.json({ ok: true, zoneId, open });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Set window failed";
+    return c.json({ error: "set_window_failed", message }, 502);
   }
 });

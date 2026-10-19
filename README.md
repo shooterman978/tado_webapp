@@ -129,8 +129,11 @@ Vor erstem HAP-Pairing:
 | POST | `/api/zones/:id/temperature` | Soll `{ "tempC": 20.5, "durationMinutes"?: number }` |
 | POST | `/api/zones/:id/overlay/clear` | Manuell beenden / Zeitplan-Approx. |
 | POST | `/api/zones/:id/power` | `{ "mode": "heat" \| "off" }` |
+| POST | `/api/zones/:id/window` | Fenster manuell `{ "open": boolean }` (UI-Smoke / Fallback) |
+| GET/PUT | `/api/zones/settings/open-window` | Auto-Aus bei offenem Fenster (lokal, kein Paywall) |
 | POST | `/api/zones/quick-actions/:action` | `off` \| `boost` \| `resume` |
 | GET | `/api/bridge/status` | Pairing-State |
+| GET | `/api/bridge/hap-report` | HAP-Diagnose (ContactSensor / Services) |
 | POST | `/api/bridge/prepare-pairing` | Pairing-Vorbereitung (Instruktionen) |
 | POST | `/api/bridge/pair` | HAP-Pairing (PIN aus Env oder Body — nie geloggt) |
 | GET | `/api/cloud/status` | Cloud-Metadaten-Link (nur Raumnamen) |

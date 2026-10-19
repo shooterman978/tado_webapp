@@ -8,12 +8,31 @@
 import { Hono } from "hono";
 import { config } from "../config.js";
 import { getBridgeClient, getHapBridgeClient } from "../modules/bridge/service.js";
+import { getHapCapabilitiesReport } from "../modules/zones/service.js";
 
 export const bridgeRoutes = new Hono();
 
 bridgeRoutes.get("/status", async (c) => {
   const status = await getBridgeClient().getStatus();
   return c.json(status);
+});
+
+/**
+ * Diagnostic: what HAP services the V3 Bridge actually exposes.
+ * Used to confirm ContactSensor / open-window availability.
+ */
+bridgeRoutes.get("/hap-report", async (c) => {
+  try {
+    const report = await getHapCapabilitiesReport();
+    console.info(
+      `[bridge] hap-report: accessories=${report.accessoryCount} thermostats=${report.thermostatCount} contactSensors=${report.contactSensorCount}`,
+    );
+    return c.json(report);
+  } catch (err) {
+    const message =
+      err instanceof Error ? err.message : "HAP report failed";
+    return c.json({ error: "hap_report_failed", message }, 502);
+  }
 });
 
 bridgeRoutes.post("/prepare-pairing", async (c) => {

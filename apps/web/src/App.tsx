@@ -106,8 +106,9 @@ export function App() {
   }, [showHumidity]);
 
   const live = Boolean(zones?.source === "bridge" && health?.bridge.paired && !offline);
-  const interactive = live;
   const fixtureMode = zones?.source === "mock" && !offline;
+  /** Live bridge or fixtures (mock power / open-window smoke). */
+  const interactive = live || fixtureMode;
 
   function patchTarget(zoneId: string, tempC: number | null): void {
     setZones((prev) => {
@@ -207,6 +208,7 @@ export function App() {
             <>
               <QuickActions
                 interactive={interactive}
+                zones={zones?.zones ?? []}
                 onDone={() => void load({ quiet: true })}
               />
               <RoomGrid

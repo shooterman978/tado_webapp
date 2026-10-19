@@ -1,10 +1,19 @@
 /**
- * Settings shell — grouped lists from screenshots 03/04.
+ * Settings shell — grouped lists from screenshots 03/04 + open-window auto-off.
  * @package @heizplan/web
  */
 
-import type { ReactNode } from "react";
-import type { HealthStatus, ZonesResponse } from "@heizplan/shared";
+import { useEffect, useState, type ReactNode } from "react";
+import type {
+  HealthStatus,
+  OpenWindowResumeMode,
+  OpenWindowSettings,
+  ZonesResponse,
+} from "@heizplan/shared";
+import {
+  fetchOpenWindowSettings,
+  saveOpenWindowSettings,
+} from "../api";
 import { ChevronIcon } from "./icons";
 
 interface SettingsScreenProps {
@@ -46,6 +55,50 @@ export function SettingsScreen({
   showHumidity,
   onShowHumidityChange,
 }: SettingsScreenProps) {
+  const [ow, setOw] = useState<OpenWindowSettings | null>(null);
+  const [owError, setOwError] = useState<string | null>(null);
+  const [owBusy, setOwBusy] = useState(false);
+
+  useEffect(() => {
+    void fetchOpenWindowSettings()
+      .then(setOw)
+      .catch((err: unknown) => {
+        setOwError(err instanceof Error ? err.message : "Einstellungen laden fehlgeschlagen");
+      });
+  }, []);
+
+  async function patchOw(next: Partial<OpenWindowSettings>): Promise<void> {
+    if (!ow) {
+      return;
+    }
+    setOwBusy(true);
+    setOwError(null);
+    try {
+      const saved = await saveOpenWindowSettings({ ...ow, ...next });
+      setOw(saved);
+    } catch (err) {
+      setOwError(err instanceof Error ? err.message : "Speichern fehlgeschlagen");
+    } finally {
+      setOwBusy(false);
+    }
+  }
+
+  function setRoomAutoOff(zoneId: string, autoOff: boolean): void {
+    if (!ow) {
+      return;
+    }
+    void patchOw({
+      rooms: {
+        ...ow.rooms,
+        [zoneId]: { ...ow.rooms[zoneId], autoOff },
+      },
+    });
+  }
+
+  function setResumeMode(resumeMode: OpenWindowResumeMode): void {
+    void patchOw({ resumeMode });
+  }
+
   return (
     <div className="settings">
       <h1 className="settings__title">Einstellungen</h1>
@@ -72,12 +125,98 @@ export function SettingsScreen({
         <Row label="Personen" glyph="P" muted />
       </div>
 
+      <p className="settings__section-label">Fenster offen</p>
+      <div className="settings-group">
+        <label className="settings-row settings-row--toggle">
+          <span className="settings-row__circle" style={{ background: "#5dade2" }} aria-hidden="true">
+            F
+          </span>
+          <span className="settings-row__label">
+            Bei offenem Fenster Heizung automatisch ausschalten
+          </span>
+          <input
+            type="checkbox"
+            checked={ow?.globalAutoOff ?? false}
+            disabled={!ow || owBusy}
+            onChange={(e) => void patchOw({ globalAutoOff: e.target.checked })}
+          />
+        </label>
+        <fieldset className="settings-resume" disabled={!ow || owBusy}>
+          <legend className="settings-resume__legend">Nach Schließen wiederherstellen</legend>
+          <label className="settings-resume__option">
+            <input
+              type="radio"
+              name="resumeMode"
+              checked={ow?.resumeMode !== "clear_overlay"}
+              onChange={() => setResumeMode("restore_setpoint")}
+            />
+            <span>
+              Vorherigen Soll wiederherstellen
+              <small>Default — speichert Zieltemperatur vor Auto-Aus</small>
+            </span>
+          </label>
+          <label className="settings-resume__option">
+            <input
+              type="radio"
+              name="resumeMode"
+              checked={ow?.resumeMode === "clear_overlay"}
+              onChange={() => setResumeMode("clear_overlay")}
+            />
+            <span>
+              Zeitplan fortsetzen
+              <small>Overlay clear / HAP Schedule-Approximation</small>
+            </span>
+          </label>
+        </fieldset>
+        {(zones?.zones ?? []).map((zone) => {
+          const room = ow?.rooms[zone.id];
+          const effective =
+            typeof room?.autoOff === "boolean" ? room.autoOff : Boolean(ow?.globalAutoOff);
+          return (
+            <label key={zone.id} className="settings-row settings-row--toggle">
+              <span className="settings-row__icon" aria-hidden="true">
+                ·
+              </span>
+              <span className="settings-row__label">
+                {zone.name}
+                {zone.windowOpen ? " · offen" : ""}
+              </span>
+              <input
+                type="checkbox"
+                checked={effective}
+                disabled={!ow || owBusy}
+                onChange={(e) => setRoomAutoOff(zone.id, e.target.checked)}
+              />
+            </label>
+          );
+        })}
+      </div>
+      {owError ? (
+        <p className="error-state" role="alert">
+          {owError}
+        </p>
+      ) : null}
+      <p className="settings__hint">
+        Lokal ohne Auto-Assist-Paywall. Erkennung: HAP ContactSensor (falls vorhanden), optional
+        Cloud <code>openWindowDetected</code>, sonst Fixture/manuell via API. Resume-Default:
+        vorherigen Soll.
+      </p>
+
       <p className="settings__section-label">Skills</p>
       <div className="settings-group">
         <Row label="Auto-Assist" glyph="A" circle="#1b5e54" muted />
         <Row label="Geofencing" glyph="G" circle="#2f6fed" muted />
         <Row label="Energy IQ" glyph="E" circle="#7cb342" muted />
-        <Row label="Fenster-Offen-Erkennung" glyph="F" circle="#5dade2" muted />
+        <Row
+          label="Fenster-Offen-Erkennung"
+          glyph="F"
+          circle="#5dade2"
+          trailing={
+            <span className="settings-row__meta">
+              {ow?.globalAutoOff ? "Auto-Aus an" : "Aktiv"}
+            </span>
+          }
+        />
         <Row label="Intelligenter Zeitplan" glyph="Z" circle="#e67e22" muted />
         <Row label="Raumluft-Komfort" glyph="L" circle="#1abc9c" muted />
       </div>
@@ -98,8 +237,7 @@ export function SettingsScreen({
       </div>
 
       <p className="settings__hint">
-        Skills ohne Backend sind sichtbar aber inaktiv. Steuerung lokal (HomeKit). Kein
-        Kalender/Learning. Produktname: Heizplan.
+        Steuerung lokal (HomeKit). Kein Kalender/Learning. Produktname: Heizplan.
       </p>
     </div>
   );

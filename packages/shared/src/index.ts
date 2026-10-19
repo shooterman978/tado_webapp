@@ -6,6 +6,17 @@
 /** How a zone display name was resolved. */
 export type ZoneNameSource = "cloud" | "map" | "hap" | "mock";
 
+/** Where open-window state was resolved from. */
+export type WindowOpenSource =
+  | "hap"
+  | "cloud"
+  | "fixture"
+  | "manual"
+  | "none";
+
+/** Resume strategy after local auto-off when the window closes. */
+export type OpenWindowResumeMode = "restore_setpoint" | "clear_overlay";
+
 /** Single thermostat / accessory folded into a room tile. */
 export interface ZoneDevice {
   id: string;
@@ -15,6 +26,8 @@ export interface ZoneDevice {
   batteryLow?: boolean | null;
   currentTempC?: number | null;
   targetTempC?: number | null;
+  /** Contact / open-window hint from this accessory, if known. */
+  windowOpen?: boolean | null;
 }
 
 /** Heating zone / room as seen by the PWA / API. */
@@ -38,6 +51,17 @@ export interface Zone {
    * Not a full Smart Schedule — indicator only until a schedule source exists.
    */
   onSchedule?: boolean;
+  /**
+   * Open window detected for this room.
+   * V3 Bridge HAP typically does not expose this — see windowSource.
+   */
+  windowOpen?: boolean;
+  /** Provenance of {@link windowOpen}. */
+  windowSource?: WindowOpenSource;
+  /** ISO timestamp when open-window was first observed (local). */
+  windowDetectedAt?: string | null;
+  /** True while local auto-off holds heating off for an open window. */
+  openWindowAutoOffActive?: boolean;
   /** ISO timestamp of last bridge update. */
   updatedAt: string | null;
   /** HAP accessory aids controlled by this room tile (aggregated). */
@@ -48,6 +72,52 @@ export interface Zone {
   devices?: ZoneDevice[];
   /** Where the friendly name came from. */
   nameSource?: ZoneNameSource;
+}
+
+/** Persisted open-window auto-off preferences (no paywall). */
+export interface OpenWindowSettings {
+  /** Default for all rooms unless overridden per room. */
+  globalAutoOff: boolean;
+  /**
+   * After window closes and auto-off was applied:
+   * - restore_setpoint: re-apply previous target + heat (default)
+   * - clear_overlay: HAP clearOverlay / schedule approximation
+   */
+  resumeMode: OpenWindowResumeMode;
+  /** Per-room override of globalAutoOff (room tile ids). */
+  rooms: Record<string, { autoOff?: boolean }>;
+}
+
+export interface HapCapabilityAccessory {
+  aid: number;
+  name: string;
+  services: Array<{
+    type: string;
+    name: string;
+    characteristics: Array<{
+      iid: number;
+      type: string;
+      name: string;
+      format?: string;
+      perms?: string[];
+      value?: unknown;
+    }>;
+  }>;
+  hasThermostat: boolean;
+  hasContactSensor: boolean;
+  hasHumidity: boolean;
+  proprietaryServiceCount: number;
+}
+
+/** Diagnostic dump of what the paired V3 Bridge exposes over HAP. */
+export interface HapCapabilitiesReport {
+  generatedAt: string;
+  paired: boolean;
+  accessoryCount: number;
+  thermostatCount: number;
+  contactSensorCount: number;
+  note: string;
+  accessories: HapCapabilityAccessory[];
 }
 
 export interface HealthStatus {
