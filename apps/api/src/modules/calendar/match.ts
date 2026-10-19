@@ -102,12 +102,13 @@ export interface RuleRoomAction {
   event: CalDavEvent;
   mode: RoomActionMode;
   targetTempC: number | null;
+  /** Per-group timing (heat vs off). */
+  timing: CalendarRuleTiming;
 }
 
 /**
  * For each room, pick the highest-priority matching action.
- * Heat rooms and off rooms from the same rule are both considered;
- * higher priority rules win per room.
+ * Heat and off groups each use their own timing window.
  */
 export function selectActiveMatches(
   events: CalDavEvent[],
@@ -115,20 +116,17 @@ export function selectActiveMatches(
   at = new Date(),
   _selectedUids: string[] = [],
 ): Map<string, RuleRoomAction> {
-  // UID / title rules always see the full event list so future pattern rules
-  // work even when the UI selection list is empty or partial.
   const enabled = rules
     .filter((r) => r.enabled)
     .sort((a, b) => b.priority - a.priority);
   const byRoom = new Map<string, RuleRoomAction>();
 
   for (const rule of enabled) {
-    const timing = rule.timing ?? "during";
+    const heatTiming = rule.timing ?? "during";
+    const offTiming = rule.offTiming ?? rule.timing ?? "during";
+
     for (const event of events) {
       if (!eventMatchesRule(event, rule)) {
-        continue;
-      }
-      if (!isEventInTimingWindow(event, timing, at)) {
         continue;
       }
 
@@ -145,30 +143,37 @@ export function selectActiveMatches(
             ? rule.roomIds
             : [];
 
-      for (const roomId of heatRooms) {
-        if (byRoom.has(roomId)) {
-          continue;
+      if (isEventInTimingWindow(event, heatTiming, at)) {
+        for (const roomId of heatRooms) {
+          if (byRoom.has(roomId)) {
+            continue;
+          }
+          byRoom.set(roomId, {
+            rule,
+            event,
+            mode: "heat",
+            targetTempC:
+              rule.mode === "eco"
+                ? (rule.targetTempC ?? 16)
+                : rule.targetTempC,
+            timing: heatTiming,
+          });
         }
-        byRoom.set(roomId, {
-          rule,
-          event,
-          mode: "heat",
-          targetTempC:
-            rule.mode === "eco"
-              ? (rule.targetTempC ?? 16)
-              : rule.targetTempC,
-        });
       }
-      for (const roomId of offRooms) {
-        if (byRoom.has(roomId)) {
-          continue;
+
+      if (isEventInTimingWindow(event, offTiming, at)) {
+        for (const roomId of offRooms) {
+          if (byRoom.has(roomId)) {
+            continue;
+          }
+          byRoom.set(roomId, {
+            rule,
+            event,
+            mode: "off",
+            targetTempC: null,
+            timing: offTiming,
+          });
         }
-        byRoom.set(roomId, {
-          rule,
-          event,
-          mode: "off",
-          targetTempC: null,
-        });
       }
     }
   }

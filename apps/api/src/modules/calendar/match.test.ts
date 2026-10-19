@@ -32,6 +32,7 @@ function rule(
     mode: partial.mode ?? "heat",
     targetTempC: partial.targetTempC ?? 20,
     timing: partial.timing ?? "during",
+    offTiming: partial.offTiming ?? partial.timing ?? "during",
     applyPath: partial.applyPath ?? "hap_overlay",
     priority: partial.priority ?? 100,
     createdAt: "2026-01-01T00:00:00.000Z",
@@ -93,6 +94,40 @@ function main(): void {
   );
   assert.equal(matches.get("heat-1")?.mode, "heat");
   assert.equal(matches.get("off-1")?.mode, "off");
+
+  // Per-group timing: heat during, off only at end.
+  const split = selectActiveMatches(
+    [event({})],
+    [
+      rule({
+        id: "split",
+        roomIds: ["heat-2"],
+        offRoomIds: ["off-2"],
+        timing: "during",
+        offTiming: "at_end",
+        targetTempC: 21,
+      }),
+    ],
+    mid,
+  );
+  assert.equal(split.has("heat-2"), true);
+  assert.equal(split.has("off-2"), false);
+  const splitEnd = selectActiveMatches(
+    [event({})],
+    [
+      rule({
+        id: "split",
+        roomIds: ["heat-2"],
+        offRoomIds: ["off-2"],
+        timing: "during",
+        offTiming: "at_end",
+        targetTempC: 21,
+      }),
+    ],
+    afterEnd,
+  );
+  assert.equal(splitEnd.has("heat-2"), false);
+  assert.equal(splitEnd.has("off-2"), true);
 
   // Pattern rules still match without selection filter.
   const future = selectActiveMatches(

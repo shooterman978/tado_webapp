@@ -59,8 +59,7 @@ async function applyHap(
   roomId: string,
   action: RuleRoomAction,
 ): Promise<void> {
-  const timing = action.rule.timing ?? "during";
-  const durationMinutes = overlayDurationMinutes(action.event, timing);
+  const durationMinutes = overlayDurationMinutes(action.event, action.timing);
 
   if (action.mode === "off") {
     await setZonePower(roomId, "off");

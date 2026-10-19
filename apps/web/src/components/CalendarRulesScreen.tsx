@@ -95,17 +95,43 @@ function rulePlainSummary(rule: CalendarRule, zones: Zone[]): string {
   const parts: string[] = [];
   if (heat) {
     parts.push(
-      `${heat} auf ${rule.targetTempC != null ? `${rule.targetTempC.toFixed(0)}°` : "—"}`,
+      `${heat} auf ${rule.targetTempC != null ? `${rule.targetTempC.toFixed(0)}°` : "—"} (${timingLabel(rule.timing)})`,
     );
   }
   if (off) {
-    parts.push(`${off} aus`);
+    parts.push(
+      `${off} aus (${timingLabel(rule.offTiming ?? rule.timing)})`,
+    );
   }
   const when =
     rule.match.kind === "event_uid"
       ? `${rule.match.eventUids?.length ?? 1} Termin(e)`
       : `Titel enthält „${rule.match.value}“`;
-  return `${when} · ${timingLabel(rule.timing)} · ${parts.join(" · ") || "keine Räume"}`;
+  return `${when} · ${parts.join(" · ") || "keine Räume"}`;
+}
+
+function TimingPicker({
+  value,
+  onChange,
+}: {
+  value: CalendarRuleTiming;
+  onChange: (t: CalendarRuleTiming) => void;
+}) {
+  return (
+    <div className="cal-wiz__timing">
+      {TIMING_OPTIONS.map((opt) => (
+        <button
+          key={opt.id}
+          type="button"
+          className={value === opt.id ? "cal-wiz__choice is-on" : "cal-wiz__choice"}
+          onClick={() => onChange(opt.id)}
+        >
+          <strong>{opt.label}</strong>
+          <span className="cal-wiz__meta">{opt.hint}</span>
+        </button>
+      ))}
+    </div>
+  );
 }
 
 export function CalendarRulesScreen({
@@ -129,7 +155,8 @@ export function CalendarRulesScreen({
   );
   const [offIds, setOffIds] = useState<string[]>([]);
   const [tempC, setTempC] = useState(20);
-  const [timing, setTiming] = useState<CalendarRuleTiming>("during");
+  const [heatTiming, setHeatTiming] = useState<CalendarRuleTiming>("during");
+  const [offTiming, setOffTiming] = useState<CalendarRuleTiming>("during");
   const [doneMsg, setDoneMsg] = useState<string | null>(null);
   const [connectUser, setConnectUser] = useState("");
   const [connectPass, setConnectPass] = useState("");
@@ -166,7 +193,8 @@ export function CalendarRulesScreen({
     setHeatIds(focusRoomId ? [focusRoomId] : []);
     setOffIds([]);
     setTempC(20);
-    setTiming("during");
+    setHeatTiming("during");
+    setOffTiming("during");
     setDoneMsg(null);
     setError(null);
   }
@@ -312,7 +340,8 @@ export function CalendarRulesScreen({
         offRoomIds: offIds,
         mode: heatIds.length > 0 ? "heat" : "off",
         targetTempC: heatIds.length > 0 ? tempC : null,
-        timing,
+        timing: heatTiming,
+        offTiming,
         applyPath: "hap_overlay",
         priority: 200,
       });
@@ -824,6 +853,8 @@ export function CalendarRulesScreen({
                   onChange={(e) => setTempC(Number(e.target.value) || 20)}
                 />
               </label>
+              <h2 className="cal-wiz__h">Wann heizen?</h2>
+              <TimingPicker value={heatTiming} onChange={setHeatTiming} />
             </>
           ) : null}
 
@@ -840,23 +871,12 @@ export function CalendarRulesScreen({
               </button>
             ))}
           </div>
-
-          <h2 className="cal-wiz__h">Wann?</h2>
-          <div className="cal-wiz__timing">
-            {TIMING_OPTIONS.map((opt) => (
-              <button
-                key={opt.id}
-                type="button"
-                className={
-                  timing === opt.id ? "cal-wiz__choice is-on" : "cal-wiz__choice"
-                }
-                onClick={() => setTiming(opt.id)}
-              >
-                <strong>{opt.label}</strong>
-                <span className="cal-wiz__meta">{opt.hint}</span>
-              </button>
-            ))}
-          </div>
+          {offIds.length > 0 ? (
+            <>
+              <h2 className="cal-wiz__h">Wann ausschalten?</h2>
+              <TimingPicker value={offTiming} onChange={setOffTiming} />
+            </>
+          ) : null}
 
           <div className="cal-wiz__nav">
             <button type="button" className="cal-wiz__ghost" onClick={stepBack}>
@@ -891,8 +911,12 @@ export function CalendarRulesScreen({
             {how === "pattern"
               ? ` · Titel enthält „${pattern}“`
               : ` · ${pickedUids.length} Termin(e)`}
-            {" · "}
-            {timingLabel(timing)}
+            {heatIds.length > 0
+              ? ` · Heizen: ${timingLabel(heatTiming)}`
+              : ""}
+            {offIds.length > 0
+              ? ` · Aus: ${timingLabel(offTiming)}`
+              : ""}
           </p>
           <button
             type="button"

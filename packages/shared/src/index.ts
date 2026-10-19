@@ -391,8 +391,16 @@ export interface CalendarRule {
   mode: CalendarRuleMode;
   /** Setpoint for heated rooms; ignored for pure off. */
   targetTempC: number | null;
-  /** When the rule fires relative to the event (default during). */
+  /**
+   * When heat rooms apply relative to the event (default during).
+   * Plain UI: „Wann?“ under „Räume heizen“.
+   */
   timing: CalendarRuleTiming;
+  /**
+   * When off rooms apply relative to the event (default during).
+   * Plain UI: „Wann?“ under „Räume ausschalten“.
+   */
+  offTiming: CalendarRuleTiming;
   /**
    * Default hap_overlay (local, quota-free).
    * cloud_write only when remaining > 0 and the engine opts in.

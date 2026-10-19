@@ -277,6 +277,15 @@ export function normaliseRule(
     timing: normaliseTiming(
       input.timing !== undefined ? input.timing : existing?.timing,
     ),
+    offTiming: normaliseTiming(
+      input.offTiming !== undefined
+        ? input.offTiming
+        : existing?.offTiming !== undefined
+          ? existing.offTiming
+          : input.timing !== undefined
+            ? input.timing
+            : existing?.timing,
+    ),
     applyPath: normaliseApplyPath(input.applyPath ?? existing?.applyPath),
     priority:
       typeof input.priority === "number" && Number.isFinite(input.priority)
