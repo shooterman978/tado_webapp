@@ -9,6 +9,7 @@ import type {
   CalendarActiveOverride,
   CalendarEvaluateResult,
   CalendarRule,
+  CalendarRuleTiming,
 } from "@heizplan/shared";
 import { config } from "../../config.js";
 import { getCloudQuota } from "../cloud/quota.js";
@@ -18,10 +19,9 @@ import {
   setZoneTemperature,
 } from "../zones/service.js";
 import type { CalDavEvent } from "./caldav.js";
-import { selectActiveMatches } from "./match.js";
+import { selectActiveMatches, type RuleRoomAction } from "./match.js";
 import {
   loadActiveOverrides,
-  loadSelectedEventUids,
   saveActiveOverrides,
 } from "./store.js";
 
@@ -38,26 +38,36 @@ function sameOverride(
   return a.roomId === roomId && a.ruleId === ruleId && a.eventUid === eventUid;
 }
 
+function overlayDurationMinutes(
+  event: CalDavEvent,
+  timing: CalendarRuleTiming,
+): number {
+  const now = Date.now();
+  const start = Date.parse(event.startsAt);
+  const end = Date.parse(event.endsAt);
+  if (timing === "at_end") {
+    return 120;
+  }
+  if (timing === "at_start") {
+    const until = Math.min(end, start + 30 * 60_000);
+    return Math.max(1, Math.ceil((until - now) / 60_000));
+  }
+  return Math.max(1, Math.ceil((end - now) / 60_000));
+}
+
 async function applyHap(
   roomId: string,
-  rule: CalendarRule,
-  event: CalDavEvent,
+  action: RuleRoomAction,
 ): Promise<void> {
-  const endsMs = Date.parse(event.endsAt);
-  const durationMinutes = Math.max(
-    1,
-    Math.ceil((endsMs - Date.now()) / 60_000),
-  );
+  const timing = action.rule.timing ?? "during";
+  const durationMinutes = overlayDurationMinutes(action.event, timing);
 
-  if (rule.mode === "off") {
+  if (action.mode === "off") {
     await setZonePower(roomId, "off");
     return;
   }
 
-  const temp =
-    rule.mode === "eco"
-      ? (rule.targetTempC ?? 16)
-      : (rule.targetTempC as number);
+  const temp = action.targetTempC ?? 20;
   await setZoneTemperature(roomId, temp, { durationMinutes });
 }
 
@@ -70,8 +80,7 @@ export async function reconcileOverrides(
   rules: CalendarRule[],
   at = new Date(),
 ): Promise<CalendarEvaluateResult> {
-  const selectedUids = await loadSelectedEventUids(dataDir());
-  const desired = selectActiveMatches(events, rules, at, selectedUids);
+  const desired = selectActiveMatches(events, rules, at);
   const previous = await loadActiveOverrides(dataDir());
   const quota = await getCloudQuota();
 
@@ -80,7 +89,6 @@ export async function reconcileOverrides(
   let skippedQuota = 0;
   const next: CalendarActiveOverride[] = [];
 
-  // Clear rooms that no longer match.
   for (const prev of previous) {
     const still = desired.get(prev.roomId);
     if (
@@ -93,8 +101,6 @@ export async function reconcileOverrides(
       if (prev.applyPath === "hap_overlay") {
         await clearZoneOverlay(prev.roomId);
       }
-      // cloud_write restore: clearing HAP is best-effort; baseline remains in cloud.
-      // Full cloud baseline re-PUT would spend quota — only when remaining > 0 and needsRestore.
       cleared += 1;
     } catch (err) {
       console.error(
@@ -104,47 +110,33 @@ export async function reconcileOverrides(
     }
   }
 
-  for (const [roomId, { rule, event }] of desired) {
+  for (const [roomId, action] of desired) {
     const existing = previous.find((p) =>
-      sameOverride(p, roomId, rule.id, event.uid),
+      sameOverride(p, roomId, action.rule.id, action.event.uid),
     );
     if (existing) {
       next.push(existing);
       continue;
     }
 
-    const applyPath =
-      rule.applyPath === "cloud_write" && quota.remaining > 0
-        ? "cloud_write"
-        : "hap_overlay";
-
-    if (rule.applyPath === "cloud_write" && quota.remaining === 0) {
+    if (action.rule.applyPath === "cloud_write" && quota.remaining === 0) {
       skippedQuota += 1;
-      // Fall back to HAP so the override still happens without burning quota.
     }
 
     try {
-      // Prefer HAP for both paths in this phase — temporary cloud timetable
-      // mutation is reserved for a later iteration; hap_overlay satisfies
-      // Calendar > Overlay > Baseline without spending CloudQuota.
-      await applyHap(roomId, rule, event);
-      if (applyPath === "cloud_write") {
-        // Counted as intentional skip of cloud mutation until schedule overlay
-        // API is extended; still record desired path for UI transparency.
-        skippedQuota += 0;
-      }
+      await applyHap(roomId, action);
       const record: CalendarActiveOverride = {
-        ruleId: rule.id,
-        ruleName: rule.name,
+        ruleId: action.rule.id,
+        ruleName: action.rule.name,
         roomId,
-        eventUid: event.uid,
-        eventSummary: event.summary,
-        startsAt: event.startsAt,
-        endsAt: event.endsAt,
+        eventUid: action.event.uid,
+        eventSummary: action.event.summary,
+        startsAt: action.event.startsAt,
+        endsAt: action.event.endsAt,
         appliedAt: new Date().toISOString(),
         applyPath: "hap_overlay",
-        targetTempC: rule.mode === "off" ? null : rule.targetTempC,
-        mode: rule.mode,
+        targetTempC: action.targetTempC,
+        mode: action.mode === "off" ? "off" : "heat",
         needsRestore: false,
       };
       next.push(record);

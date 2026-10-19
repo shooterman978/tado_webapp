@@ -15,6 +15,7 @@ import type {
   CalendarMatchKind,
   CalendarRule,
   CalendarRuleMode,
+  CalendarRuleTiming,
 } from "@heizplan/shared";
 
 const CRED_FILE = "calendar-credentials.json";
@@ -165,29 +166,77 @@ function normaliseApplyPath(pathValue: unknown): CalendarApplyPath {
   return pathValue === "cloud_write" ? "cloud_write" : "hap_overlay";
 }
 
+function normaliseTiming(value: unknown): CalendarRuleTiming {
+  if (value === "at_start" || value === "at_end") {
+    return value;
+  }
+  return "during";
+}
+
 export function normaliseRule(
   input: Partial<CalendarRule> & {
-    match?: { kind?: string; value?: string };
+    match?: { kind?: string; value?: string; eventUids?: string[] };
   },
   existing?: CalendarRule,
 ): CalendarRule {
   const now = new Date().toISOString();
-  const matchValue = (input.match?.value ?? existing?.match.value ?? "").trim();
+  const kind = normaliseMatchKind(input.match?.kind ?? existing?.match.kind);
+  const rawUids = input.match?.eventUids ?? existing?.match.eventUids ?? [];
+  const eventUids = [
+    ...new Set(
+      (Array.isArray(rawUids) ? rawUids : [])
+        .map(String)
+        .map((s) => s.trim())
+        .filter(Boolean),
+    ),
+  ];
+  let matchValue = (input.match?.value ?? existing?.match.value ?? "").trim();
+  if (kind === "event_uid") {
+    if (!matchValue && eventUids.length > 0) {
+      matchValue = eventUids[0];
+    }
+    if (matchValue && !eventUids.includes(matchValue)) {
+      eventUids.unshift(matchValue);
+    }
+  }
   if (!matchValue) {
     throw new Error("match.value is required");
   }
-  const roomIds = Array.isArray(input.roomIds)
+
+  const name = (input.name ?? existing?.name ?? matchValue).trim() || matchValue;
+  if (!name) {
+    throw new Error("name is required");
+  }
+
+  const rawRooms = Array.isArray(input.roomIds)
     ? input.roomIds.map(String).filter(Boolean)
     : existing?.roomIds ?? [];
-  if (roomIds.length === 0) {
-    throw new Error("roomIds must contain at least one room");
+  let offRooms = Array.isArray(input.offRoomIds)
+    ? [...new Set(input.offRoomIds.map(String).filter(Boolean))]
+    : [...(existing?.offRoomIds ?? [])];
+  const legacyMode = normaliseMode(input.mode ?? existing?.mode);
+  // Legacy: mode=off with only roomIds → those rooms are off.
+  if (
+    legacyMode === "off" &&
+    offRooms.length === 0 &&
+    rawRooms.length > 0 &&
+    input.offRoomIds === undefined &&
+    !existing?.offRoomIds?.length
+  ) {
+    offRooms = [...rawRooms];
   }
-  const mode = normaliseMode(input.mode ?? existing?.mode);
+  const heatRooms = rawRooms.filter((id) => !offRooms.includes(id));
+
+  if (heatRooms.length === 0 && offRooms.length === 0) {
+    throw new Error("At least one room to heat or turn off is required");
+  }
+
+  const mode = heatRooms.length === 0 ? "off" : legacyMode === "off" ? "heat" : legacyMode;
   let targetTempC =
     typeof input.targetTempC === "number"
       ? input.targetTempC
       : existing?.targetTempC ?? null;
-  if (mode === "off") {
+  if (heatRooms.length === 0) {
     targetTempC = null;
   } else if (mode === "eco") {
     targetTempC =
@@ -200,13 +249,14 @@ export function normaliseRule(
     targetTempC < 5 ||
     targetTempC > 30
   ) {
-    throw new Error("targetTempC must be between 5 and 30 for heat mode");
+    throw new Error("targetTempC must be between 5 and 30 when heating rooms");
   }
 
   return {
     id: existing?.id ?? input.id ?? randomUUID(),
-    name: (input.name ?? existing?.name ?? matchValue).trim() || matchValue,
-    enabled: typeof input.enabled === "boolean" ? input.enabled : existing?.enabled ?? true,
+    name,
+    enabled:
+      typeof input.enabled === "boolean" ? input.enabled : existing?.enabled ?? true,
     calendarId:
       input.calendarId === undefined
         ? existing?.calendarId ?? null
@@ -214,12 +264,19 @@ export function normaliseRule(
           ? String(input.calendarId)
           : null,
     match: {
-      kind: normaliseMatchKind(input.match?.kind ?? existing?.match.kind),
+      kind,
       value: matchValue,
+      ...(kind === "event_uid" && eventUids.length > 0
+        ? { eventUids }
+        : {}),
     },
-    roomIds,
+    roomIds: heatRooms,
+    offRoomIds: offRooms,
     mode,
     targetTempC,
+    timing: normaliseTiming(
+      input.timing !== undefined ? input.timing : existing?.timing,
+    ),
     applyPath: normaliseApplyPath(input.applyPath ?? existing?.applyPath),
     priority:
       typeof input.priority === "number" && Number.isFinite(input.priority)

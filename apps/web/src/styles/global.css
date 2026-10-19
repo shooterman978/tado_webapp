@@ -1778,6 +1778,44 @@ input {
   border-color: #0a84ff;
 }
 
+.cal-wiz__chip.is-off {
+  background: color-mix(in srgb, #e74c3c 55%, #1c1c1e);
+  border-color: #e74c3c;
+}
+
+.cal-wiz__choice {
+  appearance: none;
+  width: 100%;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding: 0.85rem 0.95rem;
+  border-radius: 12px;
+  border: 1px solid color-mix(in srgb, #fff 12%, transparent);
+  background: color-mix(in srgb, var(--surface, #1c1c1e) 92%, #fff 4%);
+  min-height: 3.4rem;
+}
+
+.cal-wiz__choice.is-on {
+  border-color: #0a84ff;
+  box-shadow: inset 0 0 0 1px #0a84ff;
+}
+
+.cal-wiz__event.is-on {
+  border-color: #0a84ff;
+  box-shadow: inset 0 0 0 1px #0a84ff;
+}
+
+.cal-wiz__timing {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
 .cal-wiz__field {
   display: flex;
   flex-direction: column;

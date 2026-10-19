@@ -4,8 +4,12 @@
  * @package @heizplan/api
  */
 
-import type { CalendarRule } from "@heizplan/shared";
+import type { CalendarRule, CalendarRuleTiming } from "@heizplan/shared";
 import type { CalDavEvent } from "./caldav.js";
+
+/** Grace after start / around end for at_start / at_end (ms). */
+const START_WINDOW_MS = 30 * 60_000;
+const END_WINDOW_MS = 45 * 60_000;
 
 export function eventMatchesRule(event: CalDavEvent, rule: CalendarRule): boolean {
   if (!rule.enabled) {
@@ -17,8 +21,17 @@ export function eventMatchesRule(event: CalDavEvent, rule: CalendarRule): boolea
   const title = event.summary ?? "";
   const value = rule.match.value;
   switch (rule.match.kind) {
-    case "event_uid":
-      return event.uid === value;
+    case "event_uid": {
+      const uids = new Set(
+        [
+          value,
+          ...(Array.isArray(rule.match.eventUids) ? rule.match.eventUids : []),
+        ]
+          .map(String)
+          .filter(Boolean),
+      );
+      return uids.has(event.uid);
+    }
     case "title_equals":
       return title.toLocaleLowerCase() === value.toLocaleLowerCase();
     case "title_regex": {
@@ -34,9 +47,42 @@ export function eventMatchesRule(event: CalDavEvent, rule: CalendarRule): boolea
   }
 }
 
+export function isEventActiveAt(event: CalDavEvent, at: Date): boolean {
+  const t = at.getTime();
+  return Date.parse(event.startsAt) <= t && t < Date.parse(event.endsAt);
+}
+
 /**
- * When Jonas marked events in the picker, only those UIDs are candidates.
- * Empty selection → all fetched events (pattern rules still apply).
+ * Whether the event is in the timing window for this rule.
+ * - during: entire event
+ * - at_start: from start for ~30 min (or until end if shorter)
+ * - at_end: from end−ε through ~45 min after end
+ */
+export function isEventInTimingWindow(
+  event: CalDavEvent,
+  timing: CalendarRuleTiming,
+  at = new Date(),
+): boolean {
+  const t = at.getTime();
+  const start = Date.parse(event.startsAt);
+  const end = Date.parse(event.endsAt);
+  if (!Number.isFinite(start) || !Number.isFinite(end)) {
+    return false;
+  }
+  switch (timing) {
+    case "at_start":
+      return t >= start && t < Math.min(end, start + START_WINDOW_MS);
+    case "at_end":
+      return t >= end - 60_000 && t < end + END_WINDOW_MS;
+    case "during":
+    default:
+      return start <= t && t < end;
+  }
+}
+
+/**
+ * When Jonas marked events in the picker, optionally narrow the candidate set.
+ * Empty selection → all fetched events (pattern + UID rules).
  */
 export function filterEventsBySelection(
   events: CalDavEvent[],
@@ -49,41 +95,80 @@ export function filterEventsBySelection(
   return events.filter((e) => set.has(e.uid));
 }
 
-export function isEventActiveAt(event: CalDavEvent, at: Date): boolean {
-  const t = at.getTime();
-  return Date.parse(event.startsAt) <= t && t < Date.parse(event.endsAt);
-}
+export type RoomActionMode = "heat" | "off";
 
-export interface RuleMatch {
+export interface RuleRoomAction {
   rule: CalendarRule;
   event: CalDavEvent;
+  mode: RoomActionMode;
+  targetTempC: number | null;
 }
 
 /**
- * For each room, pick the highest-priority matching active event/rule.
- * Priority: CalendarOverride layer is applied by callers above overlays.
+ * For each room, pick the highest-priority matching action.
+ * Heat rooms and off rooms from the same rule are both considered;
+ * higher priority rules win per room.
  */
 export function selectActiveMatches(
   events: CalDavEvent[],
   rules: CalendarRule[],
   at = new Date(),
-  selectedUids: string[] = [],
-): Map<string, RuleMatch> {
-  const enabled = rules.filter((r) => r.enabled).sort((a, b) => b.priority - a.priority);
-  const scoped = filterEventsBySelection(events, selectedUids);
-  const activeEvents = scoped.filter((e) => isEventActiveAt(e, at));
-  const byRoom = new Map<string, RuleMatch>();
+  _selectedUids: string[] = [],
+): Map<string, RuleRoomAction> {
+  // UID / title rules always see the full event list so future pattern rules
+  // work even when the UI selection list is empty or partial.
+  const enabled = rules
+    .filter((r) => r.enabled)
+    .sort((a, b) => b.priority - a.priority);
+  const byRoom = new Map<string, RuleRoomAction>();
 
   for (const rule of enabled) {
-    for (const event of activeEvents) {
+    const timing = rule.timing ?? "during";
+    for (const event of events) {
       if (!eventMatchesRule(event, rule)) {
         continue;
       }
-      for (const roomId of rule.roomIds) {
+      if (!isEventInTimingWindow(event, timing, at)) {
+        continue;
+      }
+
+      const heatRooms =
+        rule.offRoomIds?.length && rule.roomIds
+          ? rule.roomIds.filter((id) => !rule.offRoomIds.includes(id))
+          : rule.mode === "off"
+            ? []
+            : rule.roomIds;
+      const offRooms =
+        rule.offRoomIds?.length > 0
+          ? rule.offRoomIds
+          : rule.mode === "off"
+            ? rule.roomIds
+            : [];
+
+      for (const roomId of heatRooms) {
         if (byRoom.has(roomId)) {
-          continue; // higher priority already won
+          continue;
         }
-        byRoom.set(roomId, { rule, event });
+        byRoom.set(roomId, {
+          rule,
+          event,
+          mode: "heat",
+          targetTempC:
+            rule.mode === "eco"
+              ? (rule.targetTempC ?? 16)
+              : rule.targetTempC,
+        });
+      }
+      for (const roomId of offRooms) {
+        if (byRoom.has(roomId)) {
+          continue;
+        }
+        byRoom.set(roomId, {
+          rule,
+          event,
+          mode: "off",
+          targetTempC: null,
+        });
       }
     }
   }

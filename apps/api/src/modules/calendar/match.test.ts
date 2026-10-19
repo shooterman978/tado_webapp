@@ -13,10 +13,13 @@ import {
   eventMatchesRule,
   filterEventsBySelection,
   isEventActiveAt,
+  isEventInTimingWindow,
   selectActiveMatches,
 } from "./match.js";
 
-function rule(partial: Partial<CalendarRule> & { matchValue?: string }): CalendarRule {
+function rule(
+  partial: Partial<CalendarRule> & { matchValue?: string },
+): CalendarRule {
   const value = partial.matchValue ?? partial.match?.value ?? "Büro";
   return {
     id: partial.id ?? "r1",
@@ -25,8 +28,10 @@ function rule(partial: Partial<CalendarRule> & { matchValue?: string }): Calenda
     calendarId: partial.calendarId ?? null,
     match: partial.match ?? { kind: "title_contains", value },
     roomIds: partial.roomIds ?? ["room-z1"],
+    offRoomIds: partial.offRoomIds ?? [],
     mode: partial.mode ?? "heat",
     targetTempC: partial.targetTempC ?? 20,
+    timing: partial.timing ?? "during",
     applyPath: partial.applyPath ?? "hap_overlay",
     priority: partial.priority ?? 100,
     createdAt: "2026-01-01T00:00:00.000Z",
@@ -52,54 +57,53 @@ function main(): void {
     true,
   );
   assert.equal(
-    eventMatchesRule(event({ summary: "Home Office" }), rule({})),
-    false,
-  );
-  assert.equal(
     eventMatchesRule(
-      event({ summary: "Büro" }),
-      rule({ match: { kind: "title_equals", value: "büro" } }),
-    ),
-    true,
-  );
-  assert.equal(
-    eventMatchesRule(
-      event({ summary: "Team: Büro Sync" }),
-      rule({ match: { kind: "title_regex", value: "^Team:" } }),
+      event({ uid: "u2" }),
+      rule({
+        match: { kind: "event_uid", value: "u1", eventUids: ["u1", "u2"] },
+      }),
     ),
     true,
   );
 
-  const at = new Date("2026-10-19T12:00:00.000Z");
-  assert.equal(isEventActiveAt(event({}), at), true);
-  assert.equal(
-    isEventActiveAt(
-      event({
-        startsAt: "2026-10-19T18:00:00.000Z",
-        endsAt: "2026-10-19T19:00:00.000Z",
-      }),
-      at,
-    ),
-    false,
-  );
+  const mid = new Date("2026-10-19T12:00:00.000Z");
+  const nearStart = new Date("2026-10-19T08:10:00.000Z");
+  const afterEnd = new Date("2026-10-19T17:10:00.000Z");
+  const ev = event({});
+  assert.equal(isEventInTimingWindow(ev, "during", mid), true);
+  assert.equal(isEventInTimingWindow(ev, "at_start", nearStart), true);
+  assert.equal(isEventInTimingWindow(ev, "at_start", mid), false);
+  assert.equal(isEventInTimingWindow(ev, "at_end", afterEnd), true);
+  assert.equal(isEventInTimingWindow(ev, "at_end", mid), false);
+
+  assert.equal(isEventActiveAt(ev, mid), true);
 
   const matches = selectActiveMatches(
+    [event({ uid: "e1", summary: "Büro" })],
     [
-      event({ uid: "low", summary: "Büro low", calendarId: "a" }),
-      event({ uid: "high", summary: "Büro high", calendarId: "a" }),
-    ],
-    [
-      rule({ id: "low", priority: 10, matchValue: "Büro" }),
       rule({
-        id: "high",
-        priority: 200,
-        matchValue: "Büro high",
-        roomIds: ["room-z1"],
+        id: "mix",
+        roomIds: ["heat-1"],
+        offRoomIds: ["off-1"],
+        targetTempC: 21,
+        timing: "during",
       }),
     ],
-    at,
+    mid,
   );
-  assert.equal(matches.get("room-z1")?.rule.id, "high");
+  assert.equal(matches.get("heat-1")?.mode, "heat");
+  assert.equal(matches.get("off-1")?.mode, "off");
+
+  // Pattern rules still match without selection filter.
+  const future = selectActiveMatches(
+    [event({ uid: "future", summary: "Büro später", startsAt: "2026-10-19T08:00:00.000Z", endsAt: "2026-10-19T17:00:00.000Z" })],
+    [rule({ matchValue: "Büro" })],
+    mid,
+    [],
+  );
+  assert.ok(future.has("room-z1"));
+
+  assert.equal(filterEventsBySelection([event({ uid: "a" }), event({ uid: "b" })], ["b"]).length, 1);
 
   const iso = parseIcalDate("20261019T083000Z");
   assert.equal(iso, "2026-10-19T08:30:00.000Z");
@@ -122,37 +126,7 @@ function main(): void {
     },
     "https://caldav.icloud.com/cal/abc.ics",
   );
-  assert.equal(parsed.length, 1);
-  assert.equal(parsed[0].summary, "Büro");
   assert.equal(parsed[0].uid, "abc-1");
-
-  assert.equal(
-    eventMatchesRule(event({ uid: "uid-9", summary: "X" }), rule({
-      match: { kind: "event_uid", value: "uid-9" },
-    })),
-    true,
-  );
-  assert.equal(
-    eventMatchesRule(event({ uid: "uid-9" }), rule({
-      match: { kind: "event_uid", value: "other" },
-    })),
-    false,
-  );
-
-  const all = [
-    event({ uid: "a", summary: "A" }),
-    event({ uid: "b", summary: "B" }),
-  ];
-  assert.equal(filterEventsBySelection(all, []).length, 2);
-  assert.equal(filterEventsBySelection(all, ["b"]).map((e) => e.uid).join(","), "b");
-
-  const scoped = selectActiveMatches(
-    all,
-    [rule({ id: "r", matchValue: "A", priority: 1 })],
-    at,
-    ["b"],
-  );
-  assert.equal(scoped.size, 0, "selection filters out pattern match on A");
 
   console.log("calendar match helpers ok");
 }

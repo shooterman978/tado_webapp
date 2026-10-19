@@ -337,8 +337,17 @@ export type CalendarMatchKind =
   | "title_contains"
   | "title_equals"
   | "title_regex"
-  /** Exact CalDAV UID (from event picker). */
+  /** Exact CalDAV UID(s) from the event picker (supports multi-select). */
   | "event_uid";
+
+/**
+ * When relative to the calendar event the rule applies.
+ * Plain-language mapping (UI):
+ * - during → „während des ganzen Termins“
+ * - at_start → „wenn der Termin beginnt“
+ * - at_end → „wenn der Termin endet“
+ */
+export type CalendarRuleTiming = "during" | "at_start" | "at_end";
 
 /** Where the override is applied. */
 export type CalendarApplyPath = "hap_overlay" | "cloud_write";
@@ -347,13 +356,19 @@ export type CalendarRuleMode = "heat" | "off" | "eco";
 
 export interface CalendarRuleMatch {
   kind: CalendarMatchKind;
-  /** e.g. "Büro" — compared case-insensitively for contains/equals. */
+  /**
+   * Title pattern (contains/equals/regex) or primary event UID.
+   * For event_uid multi-select see {@link eventUids}.
+   */
   value: string;
+  /** When kind=event_uid: all selected UIDs (value is usually the first). */
+  eventUids?: string[];
 }
 
 /** Persisted user rule (no secrets). */
 export interface CalendarRule {
   id: string;
+  /** Human name — required for new rules from the wizard. */
   name: string;
   enabled: boolean;
   /**
@@ -362,11 +377,22 @@ export interface CalendarRule {
    */
   calendarId: string | null;
   match: CalendarRuleMatch;
-  /** PWA room ids (`room-z12` / fixture ids). */
+  /**
+   * Rooms to heat (or legacy single-mode room list when offRoomIds empty
+   * and mode=off).
+   */
   roomIds: string[];
+  /** Rooms to switch off while the rule applies. */
+  offRoomIds: string[];
+  /**
+   * Legacy single mode for roomIds when offRoomIds is empty.
+   * Wizard prefers roomIds=heat + offRoomIds=off with mode=heat.
+   */
   mode: CalendarRuleMode;
-  /** Required when mode is heat/eco; ignored for off. */
+  /** Setpoint for heated rooms; ignored for pure off. */
   targetTempC: number | null;
+  /** When the rule fires relative to the event (default during). */
+  timing: CalendarRuleTiming;
   /**
    * Default hap_overlay (local, quota-free).
    * cloud_write only when remaining > 0 and the engine opts in.

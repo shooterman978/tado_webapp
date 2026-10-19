@@ -1,6 +1,6 @@
 /**
- * Calendar rules — guided wizard for non-technical users.
- * Everyday German; expert options under „Erweitert“. API/engine unchanged.
+ * Calendar rules — guided wizard (everyday German).
+ * Supports future/pattern rules, multi-event select, heat+off rooms, timing.
  *
  * @package @heizplan/web
  */
@@ -9,6 +9,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type {
   CalendarEventPreview,
   CalendarRule,
+  CalendarRuleTiming,
   CalendarStatusResponse,
   CloudQuotaStatus,
   Zone,
@@ -36,12 +37,35 @@ interface CalendarRulesScreenProps {
 type WizardStep =
   | "overview"
   | "connect"
+  | "how"
   | "events"
-  | "setup"
+  | "pattern"
+  | "name"
+  | "rooms"
   | "done"
   | "advanced";
 
+type HowKind = "events" | "pattern";
+
 const TEMP_PRESETS = [18, 19, 20, 21, 22] as const;
+
+const TIMING_OPTIONS: Array<{ id: CalendarRuleTiming; label: string; hint: string }> = [
+  {
+    id: "during",
+    label: "Während des ganzen Termins",
+    hint: "Die ganze Zeit, solange der Termin läuft",
+  },
+  {
+    id: "at_start",
+    label: "Wenn der Termin beginnt",
+    hint: "Kurz ab Start (ca. 30 Minuten)",
+  },
+  {
+    id: "at_end",
+    label: "Wenn der Termin endet",
+    hint: "Ab dem Ende (ca. 45 Minuten danach)",
+  },
+];
 
 function formatWhen(iso: string): string {
   try {
@@ -57,19 +81,31 @@ function formatWhen(iso: string): string {
   }
 }
 
+function timingLabel(t: CalendarRuleTiming | undefined): string {
+  return TIMING_OPTIONS.find((o) => o.id === (t ?? "during"))?.label ?? "während des Termins";
+}
+
 function rulePlainSummary(rule: CalendarRule, zones: Zone[]): string {
-  const rooms = rule.roomIds
+  const heat = rule.roomIds
     .map((id) => zones.find((z) => z.id === id)?.name ?? id)
     .join(", ");
-  const temp =
-    rule.mode === "off"
-      ? "Aus"
-      : `${rule.targetTempC?.toFixed(0) ?? "—"}°`;
+  const off = (rule.offRoomIds ?? [])
+    .map((id) => zones.find((z) => z.id === id)?.name ?? id)
+    .join(", ");
+  const parts: string[] = [];
+  if (heat) {
+    parts.push(
+      `${heat} auf ${rule.targetTempC != null ? `${rule.targetTempC.toFixed(0)}°` : "—"}`,
+    );
+  }
+  if (off) {
+    parts.push(`${off} aus`);
+  }
   const when =
     rule.match.kind === "event_uid"
-      ? rule.name
-      : `wenn „${rule.match.value}“ im Titel`;
-  return `${when} → ${rooms || "kein Raum"} auf ${temp}`;
+      ? `${rule.match.eventUids?.length ?? 1} Termin(e)`
+      : `Titel enthält „${rule.match.value}“`;
+  return `${when} · ${timingLabel(rule.timing)} · ${parts.join(" · ") || "keine Räume"}`;
 }
 
 export function CalendarRulesScreen({
@@ -84,11 +120,16 @@ export function CalendarRulesScreen({
   const [actionBusy, setActionBusy] = useState(false);
   const [eventsBusy, setEventsBusy] = useState(false);
   const [events, setEvents] = useState<CalendarEventPreview[]>([]);
-  const [picked, setPicked] = useState<CalendarEventPreview | null>(null);
-  const [roomIds, setRoomIds] = useState<string[]>(
+  const [how, setHow] = useState<HowKind>("events");
+  const [pickedUids, setPickedUids] = useState<string[]>([]);
+  const [pattern, setPattern] = useState("");
+  const [ruleName, setRuleName] = useState("");
+  const [heatIds, setHeatIds] = useState<string[]>(
     focusRoomId ? [focusRoomId] : [],
   );
+  const [offIds, setOffIds] = useState<string[]>([]);
   const [tempC, setTempC] = useState(20);
+  const [timing, setTiming] = useState<CalendarRuleTiming>("during");
   const [doneMsg, setDoneMsg] = useState<string | null>(null);
   const [connectUser, setConnectUser] = useState("");
   const [connectPass, setConnectPass] = useState("");
@@ -117,16 +158,22 @@ export function CalendarRulesScreen({
   const configured = Boolean(status?.connection.configured);
   const rules = status?.rules ?? [];
 
-  function startNewRule(): void {
-    setError(null);
-    setPicked(null);
-    setDoneMsg(null);
-    setRoomIds(focusRoomId ? [focusRoomId] : []);
+  function resetDraft(): void {
+    setHow("events");
+    setPickedUids([]);
+    setPattern("");
+    setRuleName("");
+    setHeatIds(focusRoomId ? [focusRoomId] : []);
+    setOffIds([]);
     setTempC(20);
-    setStep(configured ? "events" : "connect");
-    if (configured) {
-      void loadEvents();
-    }
+    setTiming("during");
+    setDoneMsg(null);
+    setError(null);
+  }
+
+  function startNewRule(): void {
+    resetDraft();
+    setStep(configured ? "how" : "connect");
   }
 
   async function loadEvents(): Promise<void> {
@@ -157,8 +204,7 @@ export function CalendarRulesScreen({
       });
       setConnectPass("");
       await refreshStatus();
-      setStep("events");
-      await loadEvents();
+      setStep("how");
     } catch (err) {
       setError(
         err instanceof Error
@@ -170,65 +216,127 @@ export function CalendarRulesScreen({
     }
   }
 
-  function pickEvent(ev: CalendarEventPreview): void {
-    setPicked(ev);
-    setStep("setup");
-  }
-
-  function toggleRoom(id: string): void {
-    setRoomIds((prev) =>
-      prev.includes(id) ? prev.filter((r) => r !== id) : [...prev, id],
+  function togglePick(uid: string): void {
+    setPickedUids((prev) =>
+      prev.includes(uid) ? prev.filter((id) => id !== uid) : [...prev, uid],
     );
   }
 
+  function setHeat(id: string): void {
+    setOffIds((prev) => prev.filter((x) => x !== id));
+    setHeatIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
+    );
+  }
+
+  function setOff(id: string): void {
+    setHeatIds((prev) => prev.filter((x) => x !== id));
+    setOffIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
+    );
+  }
+
+  function suggestName(): string {
+    if (how === "pattern" && pattern.trim()) {
+      return `Wenn „${pattern.trim()}“`;
+    }
+    const names = events
+      .filter((e) => pickedUids.includes(e.uid))
+      .map((e) => e.summary);
+    if (names.length === 1) {
+      return names[0];
+    }
+    if (names.length > 1) {
+      return `${names[0]} +${names.length - 1}`;
+    }
+    return "";
+  }
+
+  function goName(): void {
+    if (!ruleName.trim()) {
+      setRuleName(suggestName());
+    }
+    setStep("name");
+  }
+
   async function finishRule(): Promise<void> {
-    if (!picked) {
+    const finalName = ruleName.trim() || suggestName();
+    if (!finalName) {
+      setError("Bitte einen Namen für die Regel eingeben.");
+      setStep("name");
       return;
     }
-    if (roomIds.length === 0) {
-      setError("Bitte mindestens einen Raum auswählen.");
+    setRuleName(finalName);
+    if (heatIds.length === 0 && offIds.length === 0) {
+      setError("Bitte mindestens einen Raum zum Heizen oder Ausschalten wählen.");
       return;
     }
+    if (how === "events" && pickedUids.length === 0) {
+      setError("Bitte mindestens einen Termin wählen — oder „Titel enthält …“ nutzen.");
+      setStep("how");
+      return;
+    }
+    if (how === "pattern" && !pattern.trim()) {
+      setError("Bitte ein Wort aus dem Termintitel eingeben.");
+      setStep("pattern");
+      return;
+    }
+
     setActionBusy(true);
     setError(null);
     try {
-      const selected = Array.from(
-        new Set([...(status?.selectedUids ?? []), picked.uid]),
-      );
-      await saveCalendarEventSelection(selected);
+      if (how === "events" && pickedUids.length > 0) {
+        const selected = Array.from(
+          new Set([...(status?.selectedUids ?? []), ...pickedUids]),
+        );
+        await saveCalendarEventSelection(selected);
+      }
+
+      const first = events.find((e) => e.uid === pickedUids[0]);
       await createCalendarRule({
-        name: picked.summary,
+        name: finalName,
         enabled: true,
-        calendarId: picked.calendarId,
-        match: { kind: "event_uid", value: picked.uid },
-        roomIds,
-        mode: "heat",
-        targetTempC: tempC,
+        calendarId: how === "events" ? (first?.calendarId ?? null) : null,
+        match:
+          how === "events"
+            ? {
+                kind: "event_uid",
+                value: pickedUids[0],
+                eventUids: pickedUids,
+              }
+            : {
+                kind: "title_contains",
+                value: pattern.trim(),
+              },
+        roomIds: heatIds,
+        offRoomIds: offIds,
+        mode: heatIds.length > 0 ? "heat" : "off",
+        targetTempC: heatIds.length > 0 ? tempC : null,
+        timing,
         applyPath: "hap_overlay",
         priority: 200,
       });
+
       try {
         const result = await evaluateCalendarRules();
         onQuotaRef.current?.(result.quota);
         setDoneMsg(
-          result.applied > 0 || result.matched > 0
-            ? "Alles eingerichtet. Wenn der Termin läuft, wird geheizt."
-            : "Gespeichert. Sobald der Termin beginnt, wird geheizt.",
+          result.matched > 0
+            ? "Alles eingerichtet. Wenn der Termin passt, wird gesteuert."
+            : "Gespeichert. Sobald ein passender Termin läuft, greift die Regel automatisch.",
         );
       } catch (err) {
         if (err instanceof ApiError && err.quota) {
           onQuotaRef.current?.(err.quota);
         }
         setDoneMsg(
-          "Regel gespeichert. Aktivierung folgt automatisch oder über „Jetzt prüfen“.",
+          "Regel gespeichert. Sie greift automatisch, sobald der Termin passt.",
         );
       }
       await refreshStatus();
       setStep("done");
     } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "Speichern fehlgeschlagen",
-      );
+      setError(err instanceof Error ? err.message : "Speichern fehlgeschlagen");
     } finally {
       setActionBusy(false);
     }
@@ -267,37 +375,84 @@ export function CalendarRulesScreen({
 
   function stepBack(): void {
     setError(null);
-    if (step === "connect" || step === "advanced") {
+    const order: WizardStep[] = [
+      "overview",
+      "connect",
+      "how",
+      "events",
+      "pattern",
+      "name",
+      "rooms",
+      "done",
+      "advanced",
+    ];
+    if (step === "overview" || step === "advanced") {
+      if (step === "advanced") {
+        setStep("overview");
+        return;
+      }
+      onBack();
+      return;
+    }
+    if (step === "connect") {
       setStep("overview");
       return;
     }
-    if (step === "events") {
+    if (step === "how") {
       setStep(configured ? "overview" : "connect");
       return;
     }
-    if (step === "setup") {
-      setStep("events");
+    if (step === "events" || step === "pattern") {
+      setStep("how");
+      return;
+    }
+    if (step === "name") {
+      setStep(how === "events" ? "events" : "pattern");
+      return;
+    }
+    if (step === "rooms") {
+      setStep("name");
       return;
     }
     if (step === "done") {
       setStep("overview");
       return;
     }
-    onBack();
+    const i = order.indexOf(step);
+    setStep(order[Math.max(0, i - 1)]);
   }
+
+  const stepPill =
+    step === "how"
+      ? "1"
+      : step === "events" || step === "pattern"
+        ? "2"
+        : step === "name"
+          ? "3"
+          : step === "rooms"
+            ? "4"
+            : step === "done"
+              ? "✓"
+              : "";
 
   const headerTitle =
     step === "overview"
       ? "Termine & Heizung"
       : step === "connect"
         ? "iPhone-Kalender"
-        : step === "events"
-          ? "Termin wählen"
-          : step === "setup"
-            ? "Räume & Wärme"
-            : step === "done"
-              ? "Fertig"
-              : "Erweitert";
+        : step === "how"
+          ? "Wie soll’s greifen?"
+          : step === "events"
+            ? "Termine wählen"
+            : step === "pattern"
+              ? "Nach Titel"
+              : step === "name"
+                ? "Name der Regel"
+                : step === "rooms"
+                  ? "Räume & Zeitpunkt"
+                  : step === "done"
+                    ? "Fertig"
+                    : "Erweitert";
 
   return (
     <div className="cal-wiz">
@@ -306,23 +461,13 @@ export function CalendarRulesScreen({
           type="button"
           className="icon-btn-ghost"
           onClick={step === "overview" ? onBack : stepBack}
-          aria-label={step === "overview" ? "Zurück" : "Vorheriger Schritt"}
+          aria-label="Zurück"
         >
           <BackIcon />
         </button>
         <h1>{headerTitle}</h1>
         <span className="cal-wiz__step-pill" aria-hidden="true">
-          {step === "overview"
-            ? ""
-            : step === "connect"
-              ? "1/4"
-              : step === "events"
-                ? "2/4"
-                : step === "setup"
-                  ? "3/4"
-                  : step === "done"
-                    ? "4/4"
-                    : ""}
+          {stepPill}
         </span>
       </header>
 
@@ -335,10 +480,9 @@ export function CalendarRulesScreen({
       {step === "overview" ? (
         <div className="cal-wiz__body">
           <p className="cal-wiz__lead">
-            Wenn ein Termin im iPhone-Kalender läuft, kann die Heizung automatisch
-            mitgehen — ganz ohne Technik-Einstellungen.
+            Termine aus dem iPhone steuern die Heizung — auch wenn der Termin erst
+            später kommt.
           </p>
-
           <button
             type="button"
             className="cal-wiz__primary"
@@ -347,22 +491,11 @@ export function CalendarRulesScreen({
           >
             Neue Regel anlegen
           </button>
-
-          {!configured ? (
-            <p className="cal-wiz__hint">
-              Noch nicht mit dem iPhone-Kalender verbunden — der Assistent hilft
-              Schritt für Schritt.
-            </p>
-          ) : (
-            <p className="cal-wiz__hint">
-              Kalender verbunden
-              {status?.connection.username
-                ? ` (${status.connection.username})`
-                : ""}
-              .
-            </p>
-          )}
-
+          <p className="cal-wiz__hint">
+            {configured
+              ? `Kalender verbunden${status?.connection.username ? ` (${status.connection.username})` : ""}.`
+              : "Noch nicht verbunden — der Assistent hilft Schritt für Schritt."}
+          </p>
           {rules.length > 0 ? (
             <>
               <h2 className="cal-wiz__h">Eure Regeln</h2>
@@ -396,15 +529,8 @@ export function CalendarRulesScreen({
               </button>
             </>
           ) : (
-            <p className="cal-wiz__meta">Noch keine Regeln — tippe oben auf „Neue Regel anlegen“.</p>
+            <p className="cal-wiz__meta">Noch keine Regeln.</p>
           )}
-
-          {(status?.active.length ?? 0) > 0 ? (
-            <p className="cal-wiz__active" role="status">
-              Gerade aktiv: {status!.active.map((a) => a.eventSummary).join(", ")}
-            </p>
-          ) : null}
-
           <button
             type="button"
             className="cal-wiz__link"
@@ -422,8 +548,8 @@ export function CalendarRulesScreen({
             normale iPhone-Passwort).
           </p>
           <ol className="cal-wiz__howto">
-            <li>Auf dem iPhone: Einstellungen → [dein Name] → Anmeldung &amp; Sicherheit</li>
-            <li>„App-Passwort“ erzeugen (Name z. B. Heizplan)</li>
+            <li>iPhone: Einstellungen → [dein Name] → Anmeldung &amp; Sicherheit</li>
+            <li>„App-Passwort“ erzeugen (z. B. Heizplan)</li>
             <li>Hier eintragen und weiter</li>
           </ol>
           <label className="cal-wiz__field">
@@ -432,7 +558,6 @@ export function CalendarRulesScreen({
               type="email"
               value={connectUser}
               disabled={actionBusy}
-              autoComplete="username"
               onChange={(e) => setConnectUser(e.target.value)}
               placeholder="name@icloud.com"
             />
@@ -443,7 +568,6 @@ export function CalendarRulesScreen({
               type="password"
               value={connectPass}
               disabled={actionBusy}
-              autoComplete="new-password"
               onChange={(e) => setConnectPass(e.target.value)}
               placeholder="xxxx-xxxx-xxxx-xxxx"
             />
@@ -468,10 +592,58 @@ export function CalendarRulesScreen({
         </div>
       ) : null}
 
+      {step === "how" ? (
+        <div className="cal-wiz__body">
+          <p className="cal-wiz__lead">Wie soll die Regel greifen?</p>
+          <button
+            type="button"
+            className={how === "events" ? "cal-wiz__choice is-on" : "cal-wiz__choice"}
+            onClick={() => setHow("events")}
+          >
+            <strong>Termine auswählen</strong>
+            <span className="cal-wiz__meta">
+              Auch zukünftige Termine aus der Liste — mehrere möglich
+            </span>
+          </button>
+          <button
+            type="button"
+            className={how === "pattern" ? "cal-wiz__choice is-on" : "cal-wiz__choice"}
+            onClick={() => setHow("pattern")}
+          >
+            <strong>Wenn der Titel … enthält</strong>
+            <span className="cal-wiz__meta">
+              Auch wenn der Termin noch nicht in der Liste steht (z. B. „Büro“)
+            </span>
+          </button>
+          <div className="cal-wiz__nav">
+            <button type="button" className="cal-wiz__ghost" onClick={stepBack}>
+              Zurück
+            </button>
+            <button
+              type="button"
+              className="cal-wiz__primary"
+              onClick={() => {
+                if (how === "events") {
+                  setStep("events");
+                  void loadEvents();
+                } else {
+                  setStep("pattern");
+                }
+              }}
+            >
+              Weiter
+            </button>
+          </div>
+        </div>
+      ) : null}
+
       {step === "events" ? (
         <div className="cal-wiz__body">
           <p className="cal-wiz__lead">
-            Welcher Termin soll die Heizung steuern? Einfach antippen.
+            Tippe alle Termine an, die gelten sollen (auch in der Zukunft).
+          </p>
+          <p className="cal-wiz__hint">
+            Fehlt der Termin noch? Zurück → „Wenn der Titel … enthält“.
           </p>
           <button
             type="button"
@@ -479,95 +651,212 @@ export function CalendarRulesScreen({
             disabled={eventsBusy}
             onClick={() => void loadEvents()}
           >
-            {eventsBusy ? "Lade Termine…" : "Termine aktualisieren"}
+            {eventsBusy ? "Lade…" : "Termine aktualisieren"}
           </button>
           {events.length === 0 && !eventsBusy ? (
             <p className="cal-wiz__meta">
-              Keine kommenden Termine gefunden. Lege einen Termin im iPhone-Kalender
-              an und tippe auf „Termine aktualisieren“.
+              Keine Termine in den nächsten Tagen. Lege einen im iPhone an — oder nutze
+              „Titel enthält …“.
             </p>
           ) : null}
           <ul className="cal-wiz__list">
-            {events.map((ev) => (
-              <li key={ev.uid}>
-                <button
-                  type="button"
-                  className="cal-wiz__event"
-                  disabled={actionBusy || eventsBusy}
-                  onClick={() => pickEvent(ev)}
-                >
-                  <strong>{ev.summary}</strong>
-                  <span className="cal-wiz__meta">
-                    {formatWhen(ev.startsAt)} – {formatWhen(ev.endsAt)}
-                    {ev.calendarName ? ` · ${ev.calendarName}` : ""}
-                  </span>
-                </button>
-              </li>
-            ))}
+            {events.map((ev) => {
+              const on = pickedUids.includes(ev.uid);
+              return (
+                <li key={ev.uid}>
+                  <button
+                    type="button"
+                    className={on ? "cal-wiz__event is-on" : "cal-wiz__event"}
+                    onClick={() => togglePick(ev.uid)}
+                  >
+                    <strong>
+                      {on ? "✓ " : ""}
+                      {ev.summary}
+                    </strong>
+                    <span className="cal-wiz__meta">
+                      {formatWhen(ev.startsAt)} – {formatWhen(ev.endsAt)}
+                      {ev.calendarName ? ` · ${ev.calendarName}` : ""}
+                    </span>
+                  </button>
+                </li>
+              );
+            })}
           </ul>
+          <p className="cal-wiz__meta">
+            {pickedUids.length === 0
+              ? "Noch keiner gewählt"
+              : `${pickedUids.length} Termin(e) gewählt`}
+          </p>
           <div className="cal-wiz__nav">
             <button type="button" className="cal-wiz__ghost" onClick={stepBack}>
               Zurück
+            </button>
+            <button
+              type="button"
+              className="cal-wiz__primary"
+              disabled={pickedUids.length === 0}
+              onClick={goName}
+            >
+              Weiter
             </button>
           </div>
         </div>
       ) : null}
 
-      {step === "setup" && picked ? (
+      {step === "pattern" ? (
         <div className="cal-wiz__body">
           <p className="cal-wiz__lead">
-            Termin: <strong>{picked.summary}</strong>
-            <br />
-            <span className="cal-wiz__meta">
-              {formatWhen(picked.startsAt)} – {formatWhen(picked.endsAt)}
-            </span>
+            Welches Wort soll im Termintitel stehen? Die Regel gilt auch für Termine,
+            die du erst später anlegst.
           </p>
-
-          <h2 className="cal-wiz__h">Welche Räume heizen?</h2>
-          <div className="cal-wiz__rooms">
-            {zones.map((z) => {
-              const on = roomIds.includes(z.id);
-              return (
-                <button
-                  key={z.id}
-                  type="button"
-                  className={
-                    on ? "cal-wiz__chip is-on" : "cal-wiz__chip"
-                  }
-                  onClick={() => toggleRoom(z.id)}
-                >
-                  {z.name}
-                </button>
-              );
-            })}
+          <label className="cal-wiz__field">
+            <span>Titel enthält</span>
+            <input
+              value={pattern}
+              onChange={(e) => setPattern(e.target.value)}
+              placeholder="z. B. Büro"
+              autoCapitalize="none"
+            />
+          </label>
+          <p className="cal-wiz__hint">
+            Beispiel: „Büro“ greift auf „Büro“, „Home Office Büro“, …
+          </p>
+          <div className="cal-wiz__nav">
+            <button type="button" className="cal-wiz__ghost" onClick={stepBack}>
+              Zurück
+            </button>
+            <button
+              type="button"
+              className="cal-wiz__primary"
+              disabled={!pattern.trim()}
+              onClick={goName}
+            >
+              Weiter
+            </button>
           </div>
+        </div>
+      ) : null}
 
-          <h2 className="cal-wiz__h">Wie warm?</h2>
-          <div className="cal-wiz__temps">
-            {TEMP_PRESETS.map((t) => (
-              <button
-                key={t}
-                type="button"
-                className={
-                  tempC === t ? "cal-wiz__chip is-on" : "cal-wiz__chip"
+      {step === "name" ? (
+        <div className="cal-wiz__body">
+          <p className="cal-wiz__lead">Wie soll die Regel heißen?</p>
+          <label className="cal-wiz__field">
+            <span>Name (empfohlen)</span>
+            <input
+              value={ruleName}
+              onChange={(e) => setRuleName(e.target.value)}
+              placeholder={suggestName() || "z. B. Büro-Tage"}
+            />
+          </label>
+          {!ruleName.trim() && suggestName() ? (
+            <button
+              type="button"
+              className="cal-wiz__link"
+              onClick={() => setRuleName(suggestName())}
+            >
+              Vorschlag übernehmen: {suggestName()}
+            </button>
+          ) : null}
+          <div className="cal-wiz__nav">
+            <button type="button" className="cal-wiz__ghost" onClick={stepBack}>
+              Zurück
+            </button>
+            <button
+              type="button"
+              className="cal-wiz__primary"
+              disabled={!ruleName.trim() && !suggestName()}
+              onClick={() => {
+                const next = ruleName.trim() || suggestName();
+                if (!next) {
+                  setError("Bitte einen Namen eingeben.");
+                  return;
                 }
-                onClick={() => setTempC(t)}
+                setRuleName(next);
+                setStep("rooms");
+              }}
+            >
+              Weiter
+            </button>
+          </div>
+        </div>
+      ) : null}
+
+      {step === "rooms" ? (
+        <div className="cal-wiz__body">
+          <p className="cal-wiz__lead">Was soll passieren?</p>
+
+          <h2 className="cal-wiz__h">Räume heizen</h2>
+          <div className="cal-wiz__rooms">
+            {zones.map((z) => (
+              <button
+                key={`h-${z.id}`}
+                type="button"
+                className={heatIds.includes(z.id) ? "cal-wiz__chip is-on" : "cal-wiz__chip"}
+                onClick={() => setHeat(z.id)}
               >
-                {t}°
+                {z.name}
               </button>
             ))}
           </div>
-          <label className="cal-wiz__field">
-            <span>Oder genau einstellen (°C)</span>
-            <input
-              type="number"
-              min={5}
-              max={30}
-              step={0.5}
-              value={tempC}
-              onChange={(e) => setTempC(Number(e.target.value) || 20)}
-            />
-          </label>
+          {heatIds.length > 0 ? (
+            <>
+              <h2 className="cal-wiz__h">Wie warm?</h2>
+              <div className="cal-wiz__temps">
+                {TEMP_PRESETS.map((t) => (
+                  <button
+                    key={t}
+                    type="button"
+                    className={tempC === t ? "cal-wiz__chip is-on" : "cal-wiz__chip"}
+                    onClick={() => setTempC(t)}
+                  >
+                    {t}°
+                  </button>
+                ))}
+              </div>
+              <label className="cal-wiz__field">
+                <span>Genau (°C)</span>
+                <input
+                  type="number"
+                  min={5}
+                  max={30}
+                  step={0.5}
+                  value={tempC}
+                  onChange={(e) => setTempC(Number(e.target.value) || 20)}
+                />
+              </label>
+            </>
+          ) : null}
+
+          <h2 className="cal-wiz__h">Räume ausschalten</h2>
+          <div className="cal-wiz__rooms">
+            {zones.map((z) => (
+              <button
+                key={`o-${z.id}`}
+                type="button"
+                className={offIds.includes(z.id) ? "cal-wiz__chip is-off" : "cal-wiz__chip"}
+                onClick={() => setOff(z.id)}
+              >
+                {z.name}
+              </button>
+            ))}
+          </div>
+
+          <h2 className="cal-wiz__h">Wann?</h2>
+          <div className="cal-wiz__timing">
+            {TIMING_OPTIONS.map((opt) => (
+              <button
+                key={opt.id}
+                type="button"
+                className={
+                  timing === opt.id ? "cal-wiz__choice is-on" : "cal-wiz__choice"
+                }
+                onClick={() => setTiming(opt.id)}
+              >
+                <strong>{opt.label}</strong>
+                <span className="cal-wiz__meta">{opt.hint}</span>
+              </button>
+            ))}
+          </div>
 
           <div className="cal-wiz__nav">
             <button type="button" className="cal-wiz__ghost" onClick={stepBack}>
@@ -576,8 +865,15 @@ export function CalendarRulesScreen({
             <button
               type="button"
               className="cal-wiz__primary"
-              disabled={actionBusy || roomIds.length === 0}
-              onClick={() => void finishRule()}
+              disabled={
+                actionBusy || (heatIds.length === 0 && offIds.length === 0)
+              }
+              onClick={() => {
+                if (!ruleName.trim()) {
+                  setRuleName(suggestName());
+                }
+                void finishRule();
+              }}
             >
               {actionBusy ? "Speichere…" : "Fertig"}
             </button>
@@ -590,21 +886,20 @@ export function CalendarRulesScreen({
           <p className="cal-wiz__lead cal-wiz__lead--ok">
             {doneMsg ?? "Gespeichert."}
           </p>
-          {picked ? (
-            <p className="cal-wiz__meta">
-              {picked.summary}:{" "}
-              {roomIds
-                .map((id) => zones.find((z) => z.id === id)?.name ?? id)
-                .join(", ")}{" "}
-              auf {tempC}°
-            </p>
-          ) : null}
+          <p className="cal-wiz__meta">
+            {ruleName}
+            {how === "pattern"
+              ? ` · Titel enthält „${pattern}“`
+              : ` · ${pickedUids.length} Termin(e)`}
+            {" · "}
+            {timingLabel(timing)}
+          </p>
           <button
             type="button"
             className="cal-wiz__primary"
             onClick={() => {
               setStep("overview");
-              setPicked(null);
+              resetDraft();
             }}
           >
             Zur Übersicht
@@ -623,22 +918,20 @@ export function CalendarRulesScreen({
       {step === "advanced" ? (
         <div className="cal-wiz__body">
           <p className="cal-wiz__hint">
-            Für Technik-Interessierte. Im Alltag reicht der Assistent oben.
+            Für Technik-Interessierte. Im Alltag reicht der Assistent.
           </p>
           <CalendarConnectionPanel
             onChanged={() => {
               void refreshStatus();
             }}
           />
-          <div className="cal-wiz__nav">
-            <button
-              type="button"
-              className="cal-wiz__primary"
-              onClick={() => setStep("overview")}
-            >
-              Zurück zur Übersicht
-            </button>
-          </div>
+          <button
+            type="button"
+            className="cal-wiz__primary"
+            onClick={() => setStep("overview")}
+          >
+            Zurück zur Übersicht
+          </button>
         </div>
       ) : null}
     </div>
