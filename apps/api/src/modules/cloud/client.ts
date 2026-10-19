@@ -1,6 +1,9 @@
 /**
- * Lightweight Tado cloud client — OAuth device-code + zone/device metadata only.
+ * Lightweight Tado cloud client — OAuth device-code, metadata, Smart Schedule.
  * Live temperature control stays on the local HomeKit bridge.
+ *
+ * Every HTTP call to Tado cloud goes through {@link cloudFetch} and counts
+ * against the central CloudQuota budget.
  *
  * Official hobbyist client_id (device code grant):
  * https://help.tado.com/en/articles/8565472-how-do-i-authenticate-to-access-the-rest-api
@@ -8,6 +11,17 @@
  * @package @heizplan/api
  */
 
+import type {
+  AwayConfiguration,
+  ScheduleBlock,
+  ScheduleDayType,
+  TimetableKind,
+  ZoneSchedule,
+} from "@heizplan/shared";
+import {
+  consumeCloudQuota,
+  noteCloudRateLimitHeaders,
+} from "./quota.js";
 import type {
   CloudTokens,
   DeviceZoneMeta,
@@ -56,6 +70,32 @@ interface CloudZone {
   }>;
 }
 
+interface TimetableTypeResponse {
+  id: 0 | 1 | 2;
+  type: TimetableKind;
+}
+
+interface RawTimetableBlock {
+  dayType: ScheduleDayType;
+  start: string;
+  end: string;
+  geolocationOverride?: boolean;
+  setting?: {
+    type?: string;
+    power?: "ON" | "OFF";
+    temperature?: { celsius?: number | null };
+  };
+}
+
+interface RawAwayConfiguration {
+  type?: string;
+  setting?: {
+    type?: string;
+    power?: "ON" | "OFF";
+    temperature?: { celsius?: number | null };
+  };
+}
+
 function tokensFromResponse(json: TokenResponse): CloudTokens {
   if (!json.access_token || !json.refresh_token) {
     throw new Error(
@@ -72,16 +112,36 @@ function tokensFromResponse(json: TokenResponse): CloudTokens {
   };
 }
 
+/**
+ * Single egress point for Tado cloud HTTP — consumes quota, never logs tokens.
+ */
+async function cloudFetch(
+  url: string,
+  init: RequestInit = {},
+): Promise<Response> {
+  await consumeCloudQuota(1);
+  const headers = new Headers(init.headers);
+  if (!headers.has("Accept")) {
+    headers.set("Accept", "application/json");
+  }
+  const res = await fetch(url, { ...init, headers });
+  try {
+    await noteCloudRateLimitHeaders(res.headers);
+  } catch {
+    /* ignore header bookkeeping failures */
+  }
+  return res;
+}
+
 async function postForm(
   url: string,
   params: Record<string, string>,
 ): Promise<Response> {
   const body = new URLSearchParams(params);
-  return fetch(url, {
+  return cloudFetch(url, {
     method: "POST",
     headers: {
       "Content-Type": "application/x-www-form-urlencoded",
-      Accept: "application/json",
     },
     body,
   });
@@ -196,10 +256,9 @@ export async function refreshAccessToken(
 }
 
 async function apiGet<T>(accessToken: string, path: string): Promise<T> {
-  const res = await fetch(`${API_BASE}${path}`, {
+  const res = await cloudFetch(`${API_BASE}${path}`, {
     headers: {
       Authorization: `Bearer ${accessToken}`,
-      Accept: "application/json",
     },
   });
   if (!res.ok) {
@@ -207,6 +266,33 @@ async function apiGet<T>(accessToken: string, path: string): Promise<T> {
     throw new Error(`Tado API ${path} failed (${res.status}): ${text.slice(0, 200)}`);
   }
   return res.json() as Promise<T>;
+}
+
+async function apiPut<T>(
+  accessToken: string,
+  path: string,
+  body: unknown,
+): Promise<T | null> {
+  const res = await cloudFetch(`${API_BASE}${path}`, {
+    method: "PUT",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": "application/json;charset=utf-8",
+    },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(`Tado API PUT ${path} failed (${res.status}): ${text.slice(0, 200)}`);
+  }
+  if (res.status === 204) {
+    return null;
+  }
+  const text = await res.text().catch(() => "");
+  if (!text) {
+    return null;
+  }
+  return JSON.parse(text) as T;
 }
 
 /**
@@ -296,4 +382,201 @@ export async function fetchOpenWindowByZoneId(
     out[zoneId] = detected;
   }
   return out;
+}
+
+function mapBlock(raw: RawTimetableBlock): ScheduleBlock {
+  const power = raw.setting?.power === "OFF" ? "OFF" : "ON";
+  const celsius = raw.setting?.temperature?.celsius;
+  return {
+    dayType: raw.dayType,
+    start: normalizeTime(raw.start),
+    end: normalizeTime(raw.end),
+    power,
+    tempC:
+      power === "OFF"
+        ? null
+        : typeof celsius === "number"
+          ? celsius
+          : null,
+    geolocationOverride: Boolean(raw.geolocationOverride),
+  };
+}
+
+function normalizeTime(value: string): string {
+  const m = value?.match(/^(\d{1,2}):(\d{2})/);
+  if (!m) {
+    return "00:00";
+  }
+  return `${String(Number(m[1])).padStart(2, "0")}:${m[2]}`;
+}
+
+function toRawBlock(block: ScheduleBlock): RawTimetableBlock {
+  const power = block.power === "OFF" ? "OFF" : "ON";
+  const setting: RawTimetableBlock["setting"] = {
+    type: "HEATING",
+    power,
+  };
+  if (power === "ON") {
+    setting.temperature = {
+      celsius: typeof block.tempC === "number" ? block.tempC : 20,
+    };
+  }
+  return {
+    dayType: block.dayType,
+    start: normalizeTime(block.start),
+    end: normalizeTime(block.end) === "24:00" ? "00:00" : normalizeTime(block.end),
+    geolocationOverride: Boolean(block.geolocationOverride),
+    setting,
+  };
+}
+
+function mapAway(raw: RawAwayConfiguration | null | undefined): AwayConfiguration {
+  const power = raw?.setting?.power === "OFF" ? "OFF" : "ON";
+  const celsius = raw?.setting?.temperature?.celsius;
+  return {
+    power,
+    tempC:
+      power === "OFF"
+        ? null
+        : typeof celsius === "number"
+          ? celsius
+          : 5,
+  };
+}
+
+const DAY_TYPES_BY_TIMETABLE: Record<0 | 1 | 2, ScheduleDayType[]> = {
+  0: ["MONDAY_TO_SUNDAY"],
+  1: ["MONDAY_TO_FRIDAY", "SATURDAY", "SUNDAY"],
+  2: [
+    "MONDAY",
+    "TUESDAY",
+    "WEDNESDAY",
+    "THURSDAY",
+    "FRIDAY",
+    "SATURDAY",
+    "SUNDAY",
+  ],
+};
+
+export function dayTypesForTimetable(
+  timetableTypeId: 0 | 1 | 2,
+): ScheduleDayType[] {
+  return DAY_TYPES_BY_TIMETABLE[timetableTypeId];
+}
+
+/**
+ * Load Smart Schedule (active Home timetable + Away config) for a cloud zone.
+ * Uses 2–3 cloud requests depending on timetable size.
+ */
+export async function fetchZoneSchedule(
+  accessToken: string,
+  homeId: number,
+  cloudZoneId: number,
+  roomId: string,
+  zoneName: string,
+): Promise<ZoneSchedule> {
+  const active = await apiGet<TimetableTypeResponse>(
+    accessToken,
+    `/homes/${homeId}/zones/${cloudZoneId}/schedule/activeTimetable`,
+  );
+  const timetableTypeId = (active?.id ?? 1) as 0 | 1 | 2;
+  const timetableType = (active?.type ??
+    (timetableTypeId === 0
+      ? "ONE_DAY"
+      : timetableTypeId === 2
+        ? "SEVEN_DAY"
+        : "THREE_DAY")) as TimetableKind;
+
+  const rawBlocks = await apiGet<RawTimetableBlock[]>(
+    accessToken,
+    `/homes/${homeId}/zones/${cloudZoneId}/schedule/timetables/${timetableTypeId}/blocks`,
+  );
+
+  let awayRaw: RawAwayConfiguration | null = null;
+  try {
+    awayRaw = await apiGet<RawAwayConfiguration>(
+      accessToken,
+      `/homes/${homeId}/zones/${cloudZoneId}/schedule/awayConfiguration`,
+    );
+  } catch {
+    awayRaw = null;
+  }
+
+  return {
+    roomId,
+    cloudZoneId,
+    zoneName,
+    timetableType,
+    timetableTypeId,
+    homeBlocks: (rawBlocks ?? []).map(mapBlock),
+    away: mapAway(awayRaw),
+    fetchedAt: new Date().toISOString(),
+  };
+}
+
+/** Replace all Home timetable blocks for one dayType (visible in official Tado app). */
+export async function putHomeDayBlocks(
+  accessToken: string,
+  homeId: number,
+  cloudZoneId: number,
+  timetableTypeId: 0 | 1 | 2,
+  dayType: ScheduleDayType,
+  blocks: ScheduleBlock[],
+): Promise<ScheduleBlock[]> {
+  const payload = blocks.map((b) =>
+    toRawBlock({ ...b, dayType }),
+  );
+  const saved = await apiPut<RawTimetableBlock[]>(
+    accessToken,
+    `/homes/${homeId}/zones/${cloudZoneId}/schedule/timetables/${timetableTypeId}/blocks/${dayType}`,
+    payload,
+  );
+  return (saved ?? payload).map(mapBlock);
+}
+
+/** Switch active timetable type (ONE_DAY / THREE_DAY / SEVEN_DAY). */
+export async function putActiveTimetable(
+  accessToken: string,
+  homeId: number,
+  cloudZoneId: number,
+  timetableTypeId: 0 | 1 | 2,
+): Promise<TimetableTypeResponse> {
+  const type: TimetableKind =
+    timetableTypeId === 0
+      ? "ONE_DAY"
+      : timetableTypeId === 2
+        ? "SEVEN_DAY"
+        : "THREE_DAY";
+  const saved = await apiPut<TimetableTypeResponse>(
+    accessToken,
+    `/homes/${homeId}/zones/${cloudZoneId}/schedule/activeTimetable`,
+    { id: timetableTypeId, type },
+  );
+  return saved ?? { id: timetableTypeId, type };
+}
+
+/** Persist Away setpoint (official app Away tab). */
+export async function putAwayConfiguration(
+  accessToken: string,
+  homeId: number,
+  cloudZoneId: number,
+  away: AwayConfiguration,
+): Promise<AwayConfiguration> {
+  const power = away.power === "OFF" ? "OFF" : "ON";
+  const body: RawAwayConfiguration = {
+    type: "HEATING",
+    setting: {
+      type: "HEATING",
+      power,
+      ...(power === "ON"
+        ? { temperature: { celsius: away.tempC ?? 5 } }
+        : {}),
+    },
+  };
+  await apiPut(
+    accessToken,
+    `/homes/${homeId}/zones/${cloudZoneId}/schedule/awayConfiguration`,
+    body,
+  );
+  return { power, tempC: power === "OFF" ? null : (away.tempC ?? 5) };
 }

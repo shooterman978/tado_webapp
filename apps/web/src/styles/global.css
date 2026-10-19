@@ -768,7 +768,84 @@ input {
   opacity: 0.75;
 }
 
-/* —— Schedule stub (02) —— */
+/* —— Cloud quota badge (global) —— */
+
+.cloud-quota-badge {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem 0.65rem;
+  margin: 0.5rem 0 0.75rem;
+  padding: 0.45rem 0.75rem;
+  border-radius: 0.75rem;
+  background: var(--surface-2);
+  font-size: 0.78rem;
+  color: var(--ink-muted);
+}
+
+.cloud-quota-badge.is-near {
+  color: #ffb74d;
+  background: #3a2e14;
+}
+
+.cloud-quota-badge.is-blocked {
+  color: #ff8a80;
+  background: #3a1515;
+}
+
+.cloud-quota-badge__warn {
+  font-weight: 700;
+}
+
+.settings-group--quota {
+  padding: 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.settings__hint--inline {
+  margin: 0;
+}
+
+.settings-quota-line {
+  margin: 0;
+  padding: 0 0.25rem;
+}
+
+.settings-row--limit {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.settings-row--limit input {
+  width: 5.5rem;
+  border-radius: 0.5rem;
+  border: 1px solid #3a3a3c;
+  background: #000;
+  color: #fff;
+  padding: 0.4rem 0.5rem;
+}
+
+.settings-quota-save {
+  appearance: none;
+  border: none;
+  border-radius: 0.55rem;
+  background: #0a84ff;
+  color: #fff;
+  font-weight: 650;
+  padding: 0.4rem 0.75rem;
+  cursor: pointer;
+}
+
+.settings-quota-save:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* —— Schedule (02) —— */
 
 .schedule__bar {
   display: grid;
@@ -776,6 +853,12 @@ input {
   align-items: center;
   gap: 0.5rem;
   margin-bottom: 0.75rem;
+}
+
+.schedule__bar .cloud-quota-badge {
+  margin: 0;
+  padding: 0.25rem 0.45rem;
+  font-size: 0.7rem;
 }
 
 .schedule__bar h1 {
@@ -890,13 +973,18 @@ input {
   overflow: hidden;
 }
 
-.schedule__bar-24 span {
+.schedule__bar-24 span,
+.schedule__bar-24 button {
   display: flex;
   align-items: center;
   justify-content: center;
   font-size: 0.65rem;
   font-weight: 700;
   min-width: 0;
+  border: none;
+  cursor: pointer;
+  padding: 0.15rem;
+  color: inherit;
 }
 
 .schedule__bar-24 .is-cool {
@@ -907,6 +995,78 @@ input {
 .schedule__bar-24 .is-warm {
   background: #7a5b1b;
   color: #ffb74d;
+}
+
+.schedule__toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.schedule__toolbar .cloud-quota-badge {
+  margin: 0;
+}
+
+.schedule__sync {
+  appearance: none;
+  border: none;
+  border-radius: 0.7rem;
+  background: #0a84ff;
+  color: #fff;
+  font-weight: 650;
+  padding: 0.55rem 0.9rem;
+  cursor: pointer;
+}
+
+.schedule__sync:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.schedule__day-toggle {
+  appearance: none;
+  border: none;
+  background: transparent;
+  color: inherit;
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+  padding: 0;
+}
+
+.schedule__edit-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+  margin-top: 0.65rem;
+  font-size: 0.78rem;
+}
+
+.schedule__chip {
+  appearance: none;
+  border: none;
+  border-radius: 0.5rem;
+  background: #3a3a3c;
+  color: #fff;
+  padding: 0.35rem 0.55rem;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.schedule__chip:disabled {
+  opacity: 0.45;
+}
+
+.schedule__away-note {
+  margin: 0.65rem 0 0;
+  font-size: 0.72rem;
+  color: var(--ink-muted);
 }
 
 .schedule__axis {
@@ -929,8 +1089,18 @@ input {
 }
 
 .schedule__add {
+  appearance: none;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  padding: 0;
   color: #0a84ff;
   font-weight: 650;
+}
+
+.schedule__add:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 
 .empty-state,

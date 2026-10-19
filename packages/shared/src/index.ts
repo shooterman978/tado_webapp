@@ -176,6 +176,92 @@ export interface CloudStatus {
   message: string;
 }
 
+/**
+ * Persistent daily budget for all Tado cloud HTTP calls
+ * (metadata, schedule, openWindow, auth refresh, …).
+ */
+export interface CloudQuotaStatus {
+  /** Requests already counted today (Europe/Berlin calendar day). */
+  used: number;
+  /** Configurable daily cap (default 80). */
+  limit: number;
+  remaining: number;
+  /** ISO timestamp of next midnight Europe/Berlin. */
+  resetsAt: string;
+  /** Calendar day key YYYY-MM-DD in Europe/Berlin. */
+  dayKey: string;
+  /** True when remaining ≤ 10% of limit (min 5). */
+  nearLimit: boolean;
+  /** True when remaining === 0. */
+  blocked: boolean;
+  /** Optional last limit hint from response headers. */
+  headerLimitHint: number | null;
+}
+
+/** Day-type keys used by Tado timetable blocks. */
+export type ScheduleDayType =
+  | "MONDAY_TO_SUNDAY"
+  | "MONDAY_TO_FRIDAY"
+  | "MONDAY"
+  | "TUESDAY"
+  | "WEDNESDAY"
+  | "THURSDAY"
+  | "FRIDAY"
+  | "SATURDAY"
+  | "SUNDAY";
+
+export type TimetableKind = "ONE_DAY" | "THREE_DAY" | "SEVEN_DAY";
+
+export type SchedulePresence = "HOME" | "AWAY";
+
+/** One heating block in a Smart Schedule day. */
+export interface ScheduleBlock {
+  dayType: ScheduleDayType;
+  /** HH:MM (24h). */
+  start: string;
+  /** HH:MM (24h); "00:00" at end of day means 24:00. */
+  end: string;
+  power: "ON" | "OFF";
+  tempC: number | null;
+  geolocationOverride?: boolean;
+}
+
+/** Away mode is a single setpoint (not a day timetable) in the Tado API. */
+export interface AwayConfiguration {
+  power: "ON" | "OFF";
+  tempC: number | null;
+}
+
+/** Smart Schedule snapshot for one cloud zone (Home timetable + Away). */
+export interface ZoneSchedule {
+  roomId: string;
+  cloudZoneId: number;
+  zoneName: string;
+  timetableType: TimetableKind;
+  timetableTypeId: 0 | 1 | 2;
+  /** Blocks for the active Home timetable (all dayTypes). */
+  homeBlocks: ScheduleBlock[];
+  away: AwayConfiguration;
+  fetchedAt: string;
+}
+
+/** PUT body to persist Home day blocks or Away config to the Tado cloud. */
+export interface ZoneScheduleUpdate {
+  presence: SchedulePresence;
+  /** Required when presence=HOME — replace all blocks for this dayType. */
+  dayType?: ScheduleDayType;
+  blocks?: ScheduleBlock[];
+  /** Active / target timetable id (required for HOME writes). */
+  timetableTypeId?: 0 | 1 | 2;
+  /**
+   * When true, PUT activeTimetable before writing blocks
+   * (extra cloud request — only when the user changes ONE/THREE/SEVEN day mode).
+   */
+  switchActiveTimetable?: boolean;
+  /** Required when presence=AWAY. */
+  away?: AwayConfiguration;
+}
+
 export interface CloudAuthStart {
   userCode: string;
   verificationUri: string;
@@ -190,13 +276,30 @@ export interface CloudAuthPollResult {
   cloud?: CloudStatus;
 }
 
-/** Extension hooks (Phase 1+) — typed placeholders only. */
+/**
+ * Extension hooks (Phase Calendar — not wired yet).
+ *
+ * Intended priority when calendar lands:
+ *   CalendarOverride (time-bounded) > manual room overlay > Smart Schedule (cloud baseline)
+ *
+ * Implementation sketch (do not build here):
+ * - Read baseline via GET /api/cloud/schedule/:roomId
+ * - Decide write path: local HAP overlay (preferred, 0 cloud) OR temporary
+ *   cloud timetable/overlay write via schedule-service (uses CloudQuota)
+ * - Use CloudQuotaStatus.resetsAt / remaining to schedule re-apply / restore
+ *   of the baseline after the event ends or after Berlin day reset
+ */
 export interface CalendarRuleHook {
   /** Keyword / title match against CalDAV events. */
   matchValue: string;
   roomId: string;
   targetTempC: number | null;
   mode: "heat" | "off" | "eco";
+  /**
+   * When set, override ends at this ISO time — restore baseline schedule
+   * (cloud re-PUT or clear local overlay). Check CloudQuota.remaining first.
+   */
+  endsAt?: string | null;
 }
 
 export interface HeatupLearningHook {

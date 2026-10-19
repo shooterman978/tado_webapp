@@ -4,10 +4,11 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { HealthStatus, ZonesResponse } from "@heizplan/shared";
-import { fetchHealth, fetchZones } from "./api";
+import type { CloudQuotaStatus, HealthStatus, ZonesResponse } from "@heizplan/shared";
+import { fetchCloudQuota, fetchHealth, fetchZones } from "./api";
 import { BottomNav, type NavTab } from "./components/BottomNav";
 import { BridgeStatus } from "./components/BridgeStatus";
+import { CloudQuotaBadge } from "./components/CloudQuotaBadge";
 import { MoreScreen } from "./components/MoreScreen";
 import { QuickActions } from "./components/QuickActions";
 import { RoomDetail } from "./components/RoomDetail";
@@ -47,6 +48,7 @@ export function App() {
   const [tab, setTab] = useState<NavTab>("home");
   const [overlay, setOverlay] = useState<Overlay>({ kind: "none" });
   const [showHumidity, setShowHumidity] = useState(() => readBool(HUMIDITY_KEY, true));
+  const [quota, setQuota] = useState<CloudQuotaStatus | null>(null);
   const [homeName] = useState(() => {
     try {
       return localStorage.getItem(HOME_NAME_KEY) || "Zuhause";
@@ -63,9 +65,16 @@ export function App() {
       setRefreshing(true);
     }
     try {
-      const [h, z] = await Promise.all([fetchHealth(), fetchZones()]);
+      const [h, z, q] = await Promise.all([
+        fetchHealth(),
+        fetchZones(),
+        fetchCloudQuota().catch(() => null),
+      ]);
       setHealth(h);
       setZones(z);
+      if (q) {
+        setQuota(q);
+      }
       setError(null);
       setOffline(false);
       setLastUpdated(new Date());
@@ -140,7 +149,11 @@ export function App() {
   if (overlay.kind === "schedule" && roomZone) {
     return (
       <div className="app-shell app-shell--overlay">
-        <ScheduleScreen zone={roomZone} onBack={() => setOverlay({ kind: "room", zoneId: roomZone.id })} />
+        <ScheduleScreen
+          zone={roomZone}
+          onBack={() => setOverlay({ kind: "room", zoneId: roomZone.id })}
+          onQuotaChange={setQuota}
+        />
       </div>
     );
   }
@@ -189,6 +202,8 @@ export function App() {
             onRefresh={() => void load()}
           />
 
+          <CloudQuotaBadge quota={quota} />
+
           {error && offline ? (
             <div className="error-state" role="alert">
               {error}
@@ -235,6 +250,8 @@ export function App() {
           zones={zones}
           showHumidity={showHumidity}
           onShowHumidityChange={setShowHumidity}
+          quota={quota}
+          onQuotaChange={setQuota}
         />
       ) : null}
 

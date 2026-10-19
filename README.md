@@ -1,6 +1,6 @@
 # Heizplan — eigener Tado-V3-Stack
 
-**Fokus jetzt:** UI-Parität zur offiziellen Tado-App (Home-Grid, Raum-Detail, Settings-Shell, Schedule-Stub). Steuerung lokal über HomeKit; Cloud nur für Raumnamen. Keine Markenassets im Repo. Kalender/Learning/HA pausiert bis Parität.
+**Fokus jetzt:** UI-Parität + Smart-Schedule-Cloud-Sync (sichtbar in der offiziellen Tado-App) mit generischer CloudQuota. Ist/Soll weiter lokal (HomeKit). Keine Markenassets. Kalender kommt als Override-Layer danach.
 
 Lokale Heizungssteuerung ohne TadoLocal als Dependency oder Backend:
 
@@ -136,10 +136,15 @@ Vor erstem HAP-Pairing:
 | GET | `/api/bridge/hap-report` | HAP-Diagnose (ContactSensor / Services) |
 | POST | `/api/bridge/prepare-pairing` | Pairing-Vorbereitung (Instruktionen) |
 | POST | `/api/bridge/pair` | HAP-Pairing (PIN aus Env oder Body — nie geloggt) |
-| GET | `/api/cloud/status` | Cloud-Metadaten-Link (nur Raumnamen) |
+| GET | `/api/cloud/status` | Cloud-Metadaten-Link (Raumnamen) |
+| GET | `/api/cloud/quota` | Generisches Tagesbudget aller Cloud-HTTP-Calls `{ used, limit, remaining, resetsAt, … }` |
+| PUT | `/api/cloud/quota` | Tageslimit setzen `{ "limit": 80 }` |
 | POST | `/api/cloud/auth/start` | Device-Code-Login starten |
 | POST | `/api/cloud/auth/poll` | Login abschließen / pollen |
 | POST | `/api/cloud/sync` | Zone-Namen erneut von der Cloud holen |
+| GET | `/api/cloud/schedule/:roomId` | Smart Schedule lesen (Home-Timetable + Away) |
+| PUT | `/api/cloud/schedule/:roomId` | Schedule schreiben → sichtbar in Tado-App |
+| POST | `/api/cloud/schedule/:roomId/sync` | Manuell neu laden („Jetzt synchronisieren“) |
 
 ---
 
@@ -152,12 +157,31 @@ Vor erstem HAP-Pairing:
 - HomeKit-PIN und Pairing-Store nur serverseitig / Volume
 - Ein HomeKit-Controller: unsere Bridge-Schicht allein
 - Cloud-Tokens (`cloud-tokens.json`) nur im Volume — nie committen/loggen
+- CloudQuota (`cloud-quota.json`): alle Cloud-HTTP-Calls, Default-Limit 80/Tag (Europe/Berlin), PIN/Tokens nie loggen
+
+---
+
+## CloudQuota & Schedule
+
+- **Ein** Zähler für Metadaten, Schedule GET/PUT, openWindow-Cloud-Fallback, Auth-Refresh.
+- Default-Limit: `CLOUD_DAILY_REQUEST_LIMIT=80` (konservativ unter ~100 ohne Abo); optional Header-Hint `X-RateLimit-Limit`.
+- UI: Badge „Heute: X / Y Cloud-Requests“ (Home + Schedule + Settings); bei Limit → 429 + klare Meldung, keine weiteren Syncs.
+- Smart Schedule: Home = Timetable-Blöcke; Away = `awayConfiguration` (fester Soll in der Tado-API).
+
+### Hook für späteren CalendarOverride (nicht in diesem PR)
+
+Priorität skizziert: `CalendarOverride` (zeitlich) > manuelles Raum-Overlay > Smart Schedule (Cloud-Baseline).
+
+1. Baseline lesen: `GET /api/cloud/schedule/:roomId` bzw. `getZoneSchedule()`.
+2. Kurzfristig: lokales HAP-Overlay bevorzugen (0 Cloud-Spend).
+3. Wenn Cloud-Write nötig: über `schedule-service` / dieselbe CloudQuota; `remaining` + `resetsAt` für Re-Apply/Restore nach Event-Ende oder Berlin-Mitternacht.
+4. Typed placeholder: `CalendarRuleHook` in `@heizplan/shared` (+ Kommentare in `schedule-service.ts`).
 
 ---
 
 ## Erweiterungspunkte (noch nicht gebaut)
 
-- Kalenderregeln (CalDAV) → `CalendarRuleHook` in `@heizplan/shared`
+- Kalenderregeln (CalDAV) → `CalendarRuleHook` / CalendarOverride-Layer
 - Heat-up-Learning → `HeatupLearningHook`
 - HA-Sync (REST/WS, kein zweiter HomeKit-Slot)
 

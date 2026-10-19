@@ -38,6 +38,11 @@ export const config = {
   bridgePin: optionalEnv("TADO_BRIDGE_PIN"),
   bridgePort: Number(env("TADO_BRIDGE_PORT", "80")),
   /**
+   * Soft daily cap for all Tado cloud HTTP calls (Europe/Berlin day).
+   * Conservative default under the ~100 free-tier ballpark; overridable via env / API.
+   */
+  cloudDailyLimit: Number(env("CLOUD_DAILY_REQUEST_LIMIT", "80")),
+  /**
    * Extension points (not wired in MVP scaffold):
    * - DATABASE_URL → rules, learning samples, sync audit
    * - HA_URL / HA_TOKEN → Home Assistant sync

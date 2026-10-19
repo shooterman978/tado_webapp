@@ -24,11 +24,15 @@ import {
   refreshAccessToken,
   startDeviceAuth,
 } from "./client.js";
+import { canAffordCloudRequest } from "./quota.js";
 
 let openWindowCache: {
   expiresAt: number;
   byZoneId: Record<number, boolean>;
 } | null = null;
+
+/** Soft cache — openWindow is optional detection; avoid burning the daily quota. */
+const OPEN_WINDOW_CACHE_MS = 5 * 60_000;
 
 function dataDir(): string {
   return config.bridgeDataDir;
@@ -148,7 +152,8 @@ export async function getCachedZoneMetadata(): Promise<ZoneMetadata | null> {
 
 /**
  * Best-effort cloud open-window map (cloud zone id → open).
- * Cached ~30s. Empty when unlinked or on error — never throws to zones list.
+ * Cached ~5 min. Skips when quota is exhausted. Never throws to zones list.
+ * Counts against the shared CloudQuota when it does hit the network.
  */
 export async function getCloudOpenWindowByZoneId(): Promise<
   Record<number, boolean>
@@ -161,11 +166,14 @@ export async function getCloudOpenWindowByZoneId(): Promise<
   if (openWindowCache && Date.now() < openWindowCache.expiresAt) {
     return openWindowCache.byZoneId;
   }
+  if (!(await canAffordCloudRequest(1))) {
+    return openWindowCache?.byZoneId ?? {};
+  }
   try {
     const accessToken = await ensureAccessToken();
     const byZoneId = await fetchOpenWindowByZoneId(accessToken, meta.homeId);
     openWindowCache = {
-      expiresAt: Date.now() + 30_000,
+      expiresAt: Date.now() + OPEN_WINDOW_CACHE_MS,
       byZoneId,
     };
     return byZoneId;

@@ -20,7 +20,7 @@ export function createApp(): Hono {
     "*",
     cors({
       origin: (origin) => origin || "*",
-      allowMethods: ["GET", "POST", "PATCH", "OPTIONS"],
+      allowMethods: ["GET", "POST", "PUT", "PATCH", "OPTIONS"],
       allowHeaders: ["Content-Type", "Authorization"],
     }),
   );
@@ -41,6 +41,8 @@ export function createApp(): Hono {
         "/api/bridge/status",
         "/api/bridge/hap-report",
         "/api/cloud/status",
+        "/api/cloud/quota",
+        "/api/cloud/schedule/:roomId",
       ],
     }),
   );
