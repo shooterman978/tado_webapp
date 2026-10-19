@@ -28,6 +28,7 @@ import {
   ScheduleResumeIcon,
   WindowIcon,
 } from "./icons";
+import { TempDisplay } from "./TempDisplay";
 
 interface RoomDetailProps {
   zone: Zone;
@@ -204,72 +205,82 @@ export function RoomDetail({
       ) : null}
 
       <div className="room-detail__soll-row">
-        <p className="room-detail__soll">
-          {off ? "Aus" : `${formatTemp(draft)}°`}
-        </p>
-        {heating ? <HeatWavesIcon className="room-detail__waves" /> : null}
+        <TempDisplay value={off ? null : draft} size="detail" off={off} />
+        {(heating || (!off && zone.targetTempC != null)) ? (
+          <HeatWavesIcon
+            className={[
+              "room-detail__waves",
+              heating ? "is-active" : "is-idle",
+            ].join(" ")}
+          />
+        ) : null}
       </div>
 
-      <div
-        className="v-slider"
-        ref={trackRef}
-        role="slider"
-        aria-valuemin={MIN_T}
-        aria-valuemax={MAX_T}
-        aria-valuenow={draft}
-        aria-label="Solltemperatur"
-        tabIndex={interactive && !off ? 0 : -1}
-        onPointerDown={(e) => {
-          if (!interactive || off) {
-            return;
-          }
-          dragging.current = true;
-          e.currentTarget.setPointerCapture(e.pointerId);
-          onPointer(e.clientY);
-        }}
-        onPointerMove={(e) => {
-          if (!dragging.current) {
-            return;
-          }
-          onPointer(e.clientY);
-        }}
-        onPointerUp={(e) => {
-          if (!dragging.current) {
-            return;
-          }
-          dragging.current = false;
-          const next = tempFromY(e.clientY, e.currentTarget.getBoundingClientRect());
-          setDraft(next);
-          void commit(next);
-        }}
-        onKeyDown={(e) => {
-          if (!interactive || off) {
-            return;
-          }
-          if (e.key === "ArrowUp" || e.key === "ArrowRight") {
-            const next = Math.min(MAX_T, draft + 0.5);
+      <div className="room-detail__slider-wrap">
+        <div
+          className={["v-slider", off ? "is-disabled" : ""].filter(Boolean).join(" ")}
+          ref={trackRef}
+          role="slider"
+          aria-valuemin={MIN_T}
+          aria-valuemax={MAX_T}
+          aria-valuenow={draft}
+          aria-label="Solltemperatur"
+          tabIndex={interactive && !off ? 0 : -1}
+          onPointerDown={(e) => {
+            if (!interactive || off) {
+              return;
+            }
+            dragging.current = true;
+            e.currentTarget.setPointerCapture(e.pointerId);
+            onPointer(e.clientY);
+          }}
+          onPointerMove={(e) => {
+            if (!dragging.current) {
+              return;
+            }
+            onPointer(e.clientY);
+          }}
+          onPointerUp={(e) => {
+            if (!dragging.current) {
+              return;
+            }
+            dragging.current = false;
+            const next = tempFromY(e.clientY, e.currentTarget.getBoundingClientRect());
             setDraft(next);
             void commit(next);
-          }
-          if (e.key === "ArrowDown" || e.key === "ArrowLeft") {
-            const next = Math.max(MIN_T, draft - 0.5);
-            setDraft(next);
-            void commit(next);
-          }
-        }}
-      >
-        <div className="v-slider__well">
-          <div
-            className="v-slider__thumb"
-            style={{ height: `${fillPct}%` }}
-            aria-hidden="true"
-          >
-            <span className="v-slider__grip" />
+          }}
+          onKeyDown={(e) => {
+            if (!interactive || off) {
+              return;
+            }
+            if (e.key === "ArrowUp" || e.key === "ArrowRight") {
+              const next = Math.min(MAX_T, draft + 0.5);
+              setDraft(next);
+              void commit(next);
+            }
+            if (e.key === "ArrowDown" || e.key === "ArrowLeft") {
+              const next = Math.max(MIN_T, draft - 0.5);
+              setDraft(next);
+              void commit(next);
+            }
+          }}
+        >
+          <div className="v-slider__well">
+            <div
+              className="v-slider__fill"
+              style={{ height: `${fillPct}%` }}
+              aria-hidden="true"
+            />
+            <span
+              className="v-slider__grip"
+              style={{ bottom: `calc(${fillPct}% - 0.1rem)` }}
+              aria-hidden="true"
+            />
           </div>
         </div>
       </div>
 
-      {zone.overlayActive || interactive ? (
+      <div className="room-detail__bottom">
         <button
           type="button"
           className="room-detail__resume"
@@ -279,36 +290,36 @@ export function RoomDetail({
           <ScheduleResumeIcon />
           Zeitplan fortsetzen
         </button>
-      ) : null}
 
-      <footer className="room-detail__footer">
-        <div className="room-detail__footer-main">
-          {zone.overlayActive ? <HandIcon /> : null}
-          <span>
-            {zone.overlayActive
-              ? overlayDurationLabel(zone)
-              : zone.onSchedule
-                ? "Zeitplan aktiv"
-                : off
-                  ? "Aus / Frostschutz"
-                  : "—"}
-          </span>
-        </div>
-        <button
-          type="button"
-          className="room-detail__edit"
-          aria-label="Overlay bearbeiten"
-          disabled={!interactive}
-          onClick={() => {
-            if (!interactive || off) {
-              return;
-            }
-            void commit(draft);
-          }}
-        >
-          <PencilIcon />
-        </button>
-      </footer>
+        <footer className="room-detail__footer">
+          <div className="room-detail__footer-main">
+            <HandIcon />
+            <span>
+              {zone.overlayActive
+                ? overlayDurationLabel(zone)
+                : zone.onSchedule
+                  ? "Bis du den Zeitplan fortsetzt"
+                  : off
+                    ? "Aus / Frostschutz"
+                    : "Bis du den Zeitplan fortsetzt"}
+            </span>
+          </div>
+          <button
+            type="button"
+            className="room-detail__edit"
+            aria-label="Overlay bearbeiten"
+            disabled={!interactive}
+            onClick={() => {
+              if (!interactive || off) {
+                return;
+              }
+              void commit(draft);
+            }}
+          >
+            <PencilIcon />
+          </button>
+        </footer>
+      </div>
 
       {error ? (
         <p className="error-state" role="alert">

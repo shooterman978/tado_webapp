@@ -243,8 +243,11 @@ export function App() {
           zones.naming.source !== "cloud" &&
           zones.naming.source !== "map" ? (
             <div className="callout callout--names" role="status">
-              <strong>Nur Radiator-Labels.</strong> Zone-Namen (Büro, Bad, …) kommen aus einmaligem
-              Cloud-Metadata-Sync — nicht aus HomeKit.
+              <strong>HAP-Namen aktiv</strong>
+              <span>
+                Kacheln zeigen Seriennummern (z. B. „Radiator · 5264“), nicht Büro/Bad. Einmal Tado
+                Cloud verknüpfen → echte Raumnamen + Geräte pro Zone zusammenfassen.
+              </span>
               <CloudLinkPanel naming={zones.naming} onLinked={() => void load({ quiet: true })} />
             </div>
           ) : null}

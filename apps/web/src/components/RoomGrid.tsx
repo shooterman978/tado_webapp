@@ -7,10 +7,10 @@ import type { Zone } from "@heizplan/shared";
 import {
   formatTemp,
   heatMode,
-  splitTemp,
   tilePalette,
 } from "../lib/zoneDisplay";
 import { DropIcon, HandIcon, WindowIcon } from "./icons";
+import { TempDisplay } from "./TempDisplay";
 
 interface RoomGridProps {
   zones: Zone[];
@@ -33,7 +33,6 @@ export function RoomGrid({ zones, showHumidity, onSelect }: RoomGridProps) {
         const palette = tilePalette(zone);
         const off = heatMode(zone) === "off";
         const manual = zone.overlayActive;
-        const { whole, frac } = splitTemp(zone.currentTempC);
         const style = {
           ["--tile-from" as string]: palette.from,
           ["--tile-to" as string]: palette.to,
@@ -73,17 +72,8 @@ export function RoomGrid({ zones, showHumidity, onSelect }: RoomGridProps) {
                 ) : null}
               </div>
 
-              <p className="room-tile__current" aria-hidden="true">
-                <span className="room-tile__whole">{whole}</span>
-                {frac != null ? (
-                  <span className="room-tile__frac">
-                    <span className="room-tile__dot">.</span>
-                    {frac}
-                    <span className="room-tile__deg">°</span>
-                  </span>
-                ) : (
-                  <span className="room-tile__deg">°</span>
-                )}
+              <p className="room-tile__current">
+                <TempDisplay value={zone.currentTempC} size="tile" />
               </p>
 
               <div className="room-tile__foot">
