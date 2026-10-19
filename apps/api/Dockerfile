@@ -18,10 +18,13 @@ COPY apps/api apps/api
 ENV NODE_ENV=production
 ENV API_HOST=0.0.0.0
 ENV API_PORT=3080
+# Corepack needs a writable home when running as non-root (`pnpm exec` → EACCES otherwise).
+ENV HOME=/home/heizplan
+ENV COREPACK_HOME=/home/heizplan/.cache/node/corepack
 
-RUN mkdir -p /data/bridge \
- && useradd --system --uid 10001 heizplan \
- && chown -R heizplan:heizplan /data /app
+RUN useradd --system --create-home --uid 10001 --home-dir /home/heizplan heizplan \
+ && mkdir -p /data/bridge "$COREPACK_HOME" \
+ && chown -R heizplan:heizplan /data /app /home/heizplan
 
 USER heizplan
 EXPOSE 3080
