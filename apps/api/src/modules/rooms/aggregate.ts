@@ -5,7 +5,12 @@
  * @package @heizplan/api
  */
 
-import type { Zone, ZoneNameSource, ZoneNamingInfo } from "@heizplan/shared";
+import type {
+  Zone,
+  ZoneDevice,
+  ZoneNameSource,
+  ZoneNamingInfo,
+} from "@heizplan/shared";
 import type { RoomMap, ZoneMetadata } from "../cloud/store.js";
 
 /** Extract Tado-style serial from HAP accessory name. */
@@ -27,13 +32,15 @@ function shortHapLabel(hapName: string): string {
 }
 
 function slugify(name: string): string {
-  return name
-    .normalize("NFKD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-|-$/g, "")
-    .slice(0, 48) || "room";
+  return (
+    name
+      .normalize("NFKD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-|-$/g, "")
+      .slice(0, 48) || "room"
+  );
 }
 
 interface ResolvedName {
@@ -104,6 +111,25 @@ function modeOrAvg(values: number[]): number | null {
   return best;
 }
 
+function toZoneDevice(member: Zone): ZoneDevice {
+  const fromList = member.devices?.[0];
+  if (fromList) {
+    return {
+      ...fromList,
+      id: fromList.id || member.id,
+      name: fromList.name || member.name,
+    };
+  }
+  return {
+    id: member.id,
+    name: member.name,
+    serialNo: extractSerial(member.name),
+    batteryLow: null,
+    currentTempC: member.currentTempC,
+    targetTempC: member.targetTempC,
+  };
+}
+
 /**
  * Fold bridge devices into room tiles using cloud metadata and/or room-map.
  */
@@ -130,7 +156,6 @@ export function aggregateRooms(
     const existing = groups.get(resolved.roomKey);
     if (existing) {
       existing.members.push(device);
-      // Prefer cloud over map over hap if mixed (shouldn't happen often).
       if (
         (resolved.source === "cloud" && existing.source !== "cloud") ||
         (resolved.source === "map" && existing.source === "hap")
@@ -155,27 +180,37 @@ export function aggregateRooms(
     const targets = group.members
       .map((m) => m.targetTempC)
       .filter((v): v is number => v !== null && Number.isFinite(v));
+    const humidities = group.members
+      .map((m) => m.humidityPercent)
+      .filter((v): v is number => v != null && Number.isFinite(v));
     const powers = group.members.map((m) => m.heatingPowerPercent ?? 0);
     const updatedAts = group.members
       .map((m) => m.updatedAt)
       .filter((v): v is string => Boolean(v))
       .sort();
+    const anyHeating = group.members.some(
+      (m) => m.targetTempC !== null || m.overlayActive || m.onSchedule,
+    );
+    const overlayActive = group.members.some((m) => m.overlayActive);
+    const deviceList = group.members.map(toZoneDevice);
 
     zones.push({
       id: roomKey,
       name: group.displayName,
       currentTempC: avg(currents),
-      targetTempC: modeOrAvg(targets),
-      overlayActive: group.members.some((m) => m.overlayActive),
+      targetTempC: anyHeating ? modeOrAvg(targets) : null,
+      overlayActive,
+      onSchedule: anyHeating && !overlayActive,
       heatingPowerPercent: powers.length ? Math.max(...powers) : null,
+      humidityPercent: humidities.length ? Math.round(avg(humidities) ?? 0) : null,
       updatedAt: updatedAts.at(-1) ?? null,
       deviceIds: group.members.map((m) => m.id),
       deviceCount: group.members.length,
+      devices: deviceList,
       nameSource: group.source,
     });
   }
 
-  // Stable order: named rooms alphabetically, then unresolved HAP leftovers.
   zones.sort((a, b) => {
     const aHap = a.nameSource === "hap" ? 1 : 0;
     const bHap = b.nameSource === "hap" ? 1 : 0;
@@ -202,7 +237,6 @@ export function aggregateRooms(
     naming: {
       source,
       syncedAt: meta?.syncedAt ?? null,
-      /** Caller fills from token store — metadata cache alone is not a live link. */
       cloudLinked: false,
       unresolvedDeviceCount: unresolved,
     },
@@ -210,15 +244,11 @@ export function aggregateRooms(
 }
 
 /** Expand a room tile id to underlying HAP accessory aids. */
-export function resolveDeviceIds(
-  zoneId: string,
-  rooms: Zone[],
-): string[] {
+export function resolveDeviceIds(zoneId: string, rooms: Zone[]): string[] {
   const room = rooms.find((z) => z.id === zoneId);
   if (room?.deviceIds?.length) {
     return room.deviceIds;
   }
-  // Backward-compat: raw HAP aid still accepted.
   if (/^\d+$/.test(zoneId)) {
     return [zoneId];
   }

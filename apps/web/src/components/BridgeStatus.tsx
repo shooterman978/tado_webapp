@@ -1,5 +1,5 @@
 /**
- * Compact bridge / API connection chip for the room overview.
+ * Compact connection chip (dark home shell).
  * @package @heizplan/web
  */
 
@@ -37,9 +37,6 @@ function classify(
   if (zones.source === "mock") {
     return "mock";
   }
-  if (health.bridge.paired && zones.source === "bridge") {
-    return "live";
-  }
   if (health.bridge.paired) {
     return "live";
   }
@@ -51,20 +48,9 @@ const LABELS: Record<ConnectionKind, string> = {
   offline: "Offline",
   unpaired: "Pairing nötig",
   error: "Bridge-Fehler",
-  mock: "Mock-Daten",
+  mock: "Fixtures",
   loading: "Lädt …",
 };
-
-function formatClock(d: Date | null): string {
-  if (!d) {
-    return "—";
-  }
-  return d.toLocaleTimeString("de-DE", {
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-  });
-}
 
 export function BridgeStatus({
   health,
@@ -75,41 +61,23 @@ export function BridgeStatus({
   onRefresh,
 }: BridgeStatusProps) {
   const kind = classify(health, zones, offline);
-  const title = LABELS[kind];
-  const namingHint =
-    zones?.naming?.source === "cloud"
-      ? " · Raumnamen Cloud"
-      : zones?.naming?.source === "map"
-        ? " · Raumnamen Map"
-        : "";
-
   return (
-    <section
-      className={`bridge-status bridge-status--${kind}`}
-      aria-live="polite"
-      aria-label="Bridge-Status"
-    >
-      <div className="bridge-status__main">
-        <span className="bridge-status__dot" aria-hidden="true" />
-        <p className="bridge-status__title">
-          {title}
-          {kind === "live" ? namingHint : ""}
-        </p>
-      </div>
-      <div className="bridge-status__meta">
-        <span className="bridge-status__clock">
-          Stand {formatClock(lastUpdated)}
-        </span>
-        <button
-          type="button"
-          className="bridge-status__refresh"
-          onClick={onRefresh}
-          disabled={refreshing}
-          aria-label="Räume aktualisieren"
-        >
-          {refreshing ? "…" : "Aktualisieren"}
-        </button>
-      </div>
+    <section className={`bridge-status bridge-status--${kind}`} aria-live="polite">
+      <span className="bridge-status__dot" aria-hidden="true" />
+      <p className="bridge-status__title">
+        {LABELS[kind]}
+        {lastUpdated
+          ? ` · ${lastUpdated.toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" })}`
+          : ""}
+      </p>
+      <button
+        type="button"
+        className="bridge-status__refresh"
+        onClick={onRefresh}
+        disabled={refreshing}
+      >
+        {refreshing ? "…" : "Aktualisieren"}
+      </button>
     </section>
   );
 }

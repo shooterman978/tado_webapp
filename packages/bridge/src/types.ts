@@ -76,4 +76,7 @@ export interface BridgeClient {
 
   /** Clear overlay / return to schedule (semantics TBD with HAP). */
   clearOverlay(zoneId: string): Promise<void>;
+
+  /** Set heating power mode: heat or off (frost). Optional on implementations. */
+  setPowerMode?(zoneId: string, mode: "heat" | "off"): Promise<void>;
 }

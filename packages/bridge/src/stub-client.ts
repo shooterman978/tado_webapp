@@ -1,6 +1,5 @@
 /**
  * Stub BridgeClient for MVP scaffold — no live HomeKit I/O.
- * Replace or wrap with a real HAP controller when pairing work starts.
  *
  * @package @heizplan/bridge
  */
@@ -26,7 +25,9 @@ const MOCK_ZONES: Zone[] = [
     currentTempC: 19.4,
     targetTempC: 21.0,
     overlayActive: false,
+    onSchedule: true,
     heatingPowerPercent: 42,
+    humidityPercent: 48,
     updatedAt: new Date().toISOString(),
   },
   {
@@ -35,7 +36,9 @@ const MOCK_ZONES: Zone[] = [
     currentTempC: 18.1,
     targetTempC: null,
     overlayActive: false,
+    onSchedule: false,
     heatingPowerPercent: 0,
+    humidityPercent: 40,
     updatedAt: new Date().toISOString(),
   },
   {
@@ -44,7 +47,9 @@ const MOCK_ZONES: Zone[] = [
     currentTempC: 20.2,
     targetTempC: 22.0,
     overlayActive: true,
+    onSchedule: false,
     heatingPowerPercent: 65,
+    humidityPercent: 60,
     updatedAt: new Date().toISOString(),
   },
 ];
@@ -93,7 +98,6 @@ export class StubBridgeClient implements BridgeClient {
   }
 
   async discover(_options?: DiscoverOptions): Promise<DiscoveredBridge[]> {
-    // mDNS / Bonjour discovery lands with real HAP client.
     return [];
   }
 
@@ -103,7 +107,6 @@ export class StubBridgeClient implements BridgeClient {
       this.state = "error";
       throw new Error("HomeKit setup code must be 8 digits.");
     }
-    // Full HAP handshake not implemented in MVP scaffold.
     this.state = "error";
     throw new Error(
       "HAP pairing not implemented yet. Interface ready; implement BridgeClient.pairWithPin.",
@@ -138,5 +141,12 @@ export class StubBridgeClient implements BridgeClient {
       throw new Error("zoneId is required.");
     }
     throw new Error("clearOverlay: HAP not implemented yet.");
+  }
+
+  async setPowerMode(zoneId: string, mode: "heat" | "off"): Promise<void> {
+    if (!zoneId || (mode !== "heat" && mode !== "off")) {
+      throw new Error("zoneId and mode are required.");
+    }
+    throw new Error("setPowerMode: HAP not implemented yet.");
   }
 }

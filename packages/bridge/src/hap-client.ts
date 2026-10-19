@@ -58,7 +58,12 @@ interface ThermostatRef {
   currentTempIid: number;
   targetHeatIid: number;
   currentHeatIid: number;
+  humidityIid: number;
+  batteryLowIid: number;
 }
+
+/** HomeKit TargetHeatingCoolingState: Off */
+const OFF_MODE = 0;
 
 function normalizePin(pin: string): string {
   const digits = pin.replace(/\D/g, "");
@@ -348,12 +353,35 @@ export class HapBridgeClient implements BridgeClient {
 
     for (const accessory of db.accessories ?? []) {
       const aid = Number(accessory.aid);
+      let humidityIid = -1;
+      let batteryLowIid = -1;
+      let accessoryName: string | null = null;
+
+      // Humidity / battery often live on sibling services of the same accessory.
+      for (const service of accessory.services ?? []) {
+        for (const ch of service.characteristics ?? []) {
+          const n = charName(String(ch.type));
+          const iid = Number(ch.iid);
+          if (n.includes("relative-humidity.current") || n === "currentrelativehumidity") {
+            humidityIid = iid;
+          } else if (n.includes("status-low-battery") || n.includes("statuslowbattery")) {
+            batteryLowIid = iid;
+          } else if (
+            n === "name" &&
+            ch.value != null &&
+            !accessoryName
+          ) {
+            accessoryName = String(ch.value);
+          }
+        }
+      }
+
       for (const service of accessory.services ?? []) {
         if (!isThermostatService(String(service.type))) {
           continue;
         }
 
-        let name = `Zone ${aid}`;
+        let name = accessoryName ?? `Zone ${aid}`;
         let targetTempIid = -1;
         let currentTempIid = -1;
         let targetHeatIid = -1;
@@ -386,6 +414,8 @@ export class HapBridgeClient implements BridgeClient {
           currentTempIid,
           targetHeatIid,
           currentHeatIid,
+          humidityIid,
+          batteryLowIid,
         });
       }
     }
@@ -415,6 +445,12 @@ export class HapBridgeClient implements BridgeClient {
       if (ref.targetHeatIid >= 0) {
         ids.push(`${ref.aid}.${ref.targetHeatIid}`);
       }
+      if (ref.humidityIid >= 0) {
+        ids.push(`${ref.aid}.${ref.humidityIid}`);
+      }
+      if (ref.batteryLowIid >= 0) {
+        ids.push(`${ref.aid}.${ref.batteryLowIid}`);
+      }
     }
 
     const { characteristics } = await client.getCharacteristics(ids);
@@ -432,21 +468,43 @@ export class HapBridgeClient implements BridgeClient {
       const heatTarget =
         ref.targetHeatIid >= 0
           ? Number(byKey.get(`${ref.aid}.${ref.targetHeatIid}`))
-          : 0;
+          : HEAT_MODE;
       const heatCurrent =
         ref.currentHeatIid >= 0
           ? Number(byKey.get(`${ref.aid}.${ref.currentHeatIid}`))
           : 0;
+      const humidity =
+        ref.humidityIid >= 0
+          ? Number(byKey.get(`${ref.aid}.${ref.humidityIid}`))
+          : NaN;
+      const batteryRaw =
+        ref.batteryLowIid >= 0
+          ? Number(byKey.get(`${ref.aid}.${ref.batteryLowIid}`))
+          : NaN;
+      const heating = heatTarget === HEAT_MODE;
+      const serialMatch = ref.name.match(/\b([A-Z]{2}[A-Z0-9]*\d{4,})\b/i);
 
       return {
         id: String(ref.aid),
         name: ref.name,
         currentTempC: Number.isFinite(current) ? current : null,
-        targetTempC: Number.isFinite(target) ? target : null,
-        overlayActive: heatTarget === HEAT_MODE,
+        targetTempC: heating && Number.isFinite(target) ? target : null,
+        overlayActive: false,
+        onSchedule: heating,
         heatingPowerPercent:
           heatCurrent === HEAT_MODE ? 100 : heatCurrent > 0 ? 50 : 0,
+        humidityPercent: Number.isFinite(humidity) ? Math.round(humidity) : null,
         updatedAt: now,
+        devices: [
+          {
+            id: String(ref.aid),
+            name: ref.name,
+            serialNo: serialMatch ? serialMatch[1].toUpperCase() : null,
+            batteryLow: Number.isFinite(batteryRaw) ? batteryRaw > 0 : null,
+            currentTempC: Number.isFinite(current) ? current : null,
+            targetTempC: heating && Number.isFinite(target) ? target : null,
+          },
+        ],
       };
     });
   }
@@ -478,6 +536,11 @@ export class HapBridgeClient implements BridgeClient {
   }
 
   async clearOverlay(zoneId: string): Promise<void> {
+    // Local semantics: return to heat mode (schedule approximation).
+    await this.setPowerMode(zoneId, "heat");
+  }
+
+  async setPowerMode(zoneId: string, mode: "heat" | "off"): Promise<void> {
     await this.init();
     if (!zoneId) {
       throw new Error("zoneId is required.");
@@ -489,9 +552,8 @@ export class HapBridgeClient implements BridgeClient {
       throw new Error(`Unknown zone or no heat mode characteristic: ${zoneId}`);
     }
     const client = this.requireClient();
-    // Off — closest HAP equivalent to ending a manual heat overlay.
     await client.setCharacteristics({
-      [`${ref.aid}.${ref.targetHeatIid}`]: 0,
+      [`${ref.aid}.${ref.targetHeatIid}`]: mode === "heat" ? HEAT_MODE : OFF_MODE,
     });
   }
 }

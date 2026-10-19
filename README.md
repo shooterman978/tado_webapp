@@ -1,5 +1,7 @@
 # Heizplan — eigener Tado-V3-Stack
 
+**Fokus jetzt:** UI-Parität zur offiziellen Tado-App (Home-Grid, Raum-Detail, Settings-Shell, Schedule-Stub). Steuerung lokal über HomeKit; Cloud nur für Raumnamen. Keine Markenassets im Repo. Kalender/Learning/HA pausiert bis Parität.
+
 Lokale Heizungssteuerung ohne TadoLocal als Dependency oder Backend:
 
 ```
@@ -123,8 +125,11 @@ Vor erstem HAP-Pairing:
 | Methode | Pfad | Zweck |
 |---|---|---|
 | GET | `/api/health` | Liveness + Bridge-Status |
-| GET | `/api/zones` | Raumkacheln (aggregiert; Mock wenn unpaired) |
-| POST | `/api/zones/:id/temperature` | Solltemperatur setzen `{ "tempC": 20.5 }` (alle Geräte im Raum) |
+| GET | `/api/zones` | Raumkacheln (aggregiert; Mock/Fixtures wenn unpaired) |
+| POST | `/api/zones/:id/temperature` | Soll `{ "tempC": 20.5, "durationMinutes"?: number }` |
+| POST | `/api/zones/:id/overlay/clear` | Manuell beenden / Zeitplan-Approx. |
+| POST | `/api/zones/:id/power` | `{ "mode": "heat" \| "off" }` |
+| POST | `/api/zones/quick-actions/:action` | `off` \| `boost` \| `resume` |
 | GET | `/api/bridge/status` | Pairing-State |
 | POST | `/api/bridge/prepare-pairing` | Pairing-Vorbereitung (Instruktionen) |
 | POST | `/api/bridge/pair` | HAP-Pairing (PIN aus Env oder Body — nie geloggt) |
@@ -157,4 +162,4 @@ Vor erstem HAP-Pairing:
 
 ## Produktname
 
-Arbeitsname **Heizplan** — helles Raumkachel-UI (Tado-ähnliche Hierarchy, eigenes Design), keine TadoLocal-UI / keine Markenlogos.
+Arbeitsname **Heizplan** — dunkles Tado-nahes UI (eigenes CSS/Icons), keine TadoLocal-UI / keine Markenlogos.

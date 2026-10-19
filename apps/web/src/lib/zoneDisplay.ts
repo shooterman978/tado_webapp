@@ -1,45 +1,19 @@
 /**
- * Presentation helpers for room tiles (friendly names + heat state).
+ * Presentation helpers — colours/labels from Tado screenshot parity.
  * @package @heizplan/web
  */
 
 import type { Zone } from "@heizplan/shared";
 
-/** Soft per-room atmosphere accent (not brand purple; hash-stable). */
-const ROOM_PALETTES = [
-  { from: "#ffe8d6", to: "#ffd4b8", accent: "#c45c26" },
-  { from: "#e4f0ea", to: "#cfe4d8", accent: "#2f6b55" },
-  { from: "#e8eef8", to: "#d4dff0", accent: "#3a5f8a" },
-  { from: "#f3e9f0", to: "#e6d4e0", accent: "#7a4a6a" },
-  { from: "#f0efe4", to: "#e2e0c8", accent: "#6b6a3a" },
-  { from: "#e9f3f4", to: "#cfe6e8", accent: "#2f6f74" },
-  { from: "#f8ebe6", to: "#efd5cb", accent: "#a85a45" },
-  { from: "#eceaf6", to: "#d9d5eb", accent: "#5a5080" },
-] as const;
-
-export function roomPalette(name: string): (typeof ROOM_PALETTES)[number] {
-  let hash = 0;
-  for (let i = 0; i < name.length; i += 1) {
-    hash = (hash * 31 + name.charCodeAt(i)) >>> 0;
-  }
-  return ROOM_PALETTES[hash % ROOM_PALETTES.length];
-}
-
 export type HeatMode = "heat" | "off" | "unknown";
 
-/** Target heating mode from bridge mapping (overlayActive ≈ Heat). */
 export function heatMode(zone: Zone): HeatMode {
   if (zone.targetTempC === null && !zone.overlayActive) {
     return "off";
   }
-  return zone.overlayActive ? "heat" : "off";
+  return "heat";
 }
 
-export function heatModeLabel(zone: Zone): string {
-  return heatMode(zone) === "heat" ? "Heizen" : "Aus";
-}
-
-/** True when the radiator/thermostat is actively delivering heat. */
 export function isActivelyHeating(zone: Zone): boolean {
   return (zone.heatingPowerPercent ?? 0) > 0;
 }
@@ -61,10 +35,92 @@ export function formatTemp(value: number | null): string {
   return value.toFixed(1);
 }
 
-export function deviceCountLabel(zone: Zone): string | null {
-  const n = zone.deviceCount ?? zone.deviceIds?.length ?? 0;
-  if (n <= 1) {
+/** Split "20.4" → { whole: "20", frac: "4" } for tile typography. */
+export function splitTemp(value: number | null): {
+  whole: string;
+  frac: string | null;
+} {
+  if (value === null) {
+    return { whole: "—", frac: null };
+  }
+  const [whole, frac] = value.toFixed(1).split(".");
+  return { whole, frac: frac ?? null };
+}
+
+/**
+ * Dark tile gradients from screenshot 05:
+ * warm/orange for higher setpoints, teal-green for eco (<19), grey OFF.
+ */
+export function tilePalette(zone: Zone): {
+  from: string;
+  to: string;
+  accent: string;
+  ink: string;
+  muted: string;
+  kind: "warm" | "eco" | "off";
+} {
+  if (heatMode(zone) === "off" || zone.targetTempC === null) {
+    return {
+      from: "#3a3a3c",
+      to: "#2c2c2e",
+      accent: "#8e8e93",
+      ink: "#f2f2f7",
+      muted: "#aeaeb2",
+      kind: "off",
+    };
+  }
+
+  const t = zone.targetTempC;
+  if (t < 19) {
+    // Deep teal / forest (Kinderzimmer, Küche, Schlafzimmer)
+    return {
+      from: "#1a4a3e",
+      to: "#0f2f28",
+      accent: "#5ec8a8",
+      ink: "#f5fffb",
+      muted: "#a8d4c6",
+      kind: "eco",
+    };
+  }
+  // Burnt orange / muddy gold (Wohnzimmer, Büro, Bad)
+  return {
+    from: "#8a5a18",
+    to: "#5c3a0e",
+    accent: "#ffc14d",
+    ink: "#fff8ec",
+    muted: "#e8c98a",
+    kind: "warm",
+  };
+}
+
+export function overlayDurationLabel(zone: Zone): string | null {
+  if (!zone.overlayActive) {
     return null;
   }
-  return `${n} Geräte`;
+  if (!zone.overlayEndsAt) {
+    return "Bis du den Zeitplan fortsetzt";
+  }
+  const ms = Date.parse(zone.overlayEndsAt) - Date.now();
+  if (!Number.isFinite(ms) || ms <= 0) {
+    return "Bis du den Zeitplan fortsetzt";
+  }
+  const mins = Math.round(ms / 60_000);
+  if (mins < 60) {
+    return `Noch ${mins} Min`;
+  }
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  return m > 0 ? `Noch ${h} Std ${m} Min` : `Noch ${h} Std`;
+}
+
+/** Detail screen olive background from screenshot 01 — tinted by room kind. */
+export function detailBackground(zone: Zone): string {
+  const p = tilePalette(zone);
+  if (p.kind === "eco") {
+    return "#1a332c";
+  }
+  if (p.kind === "off") {
+    return "#2a2a2c";
+  }
+  return "#423b19";
 }

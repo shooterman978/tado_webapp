@@ -6,6 +6,17 @@
 /** How a zone display name was resolved. */
 export type ZoneNameSource = "cloud" | "map" | "hap" | "mock";
 
+/** Single thermostat / accessory folded into a room tile. */
+export interface ZoneDevice {
+  id: string;
+  name: string;
+  serialNo?: string | null;
+  /** Low-battery hint from HAP, if known. */
+  batteryLow?: boolean | null;
+  currentTempC?: number | null;
+  targetTempC?: number | null;
+}
+
 /** Heating zone / room as seen by the PWA / API. */
 export interface Zone {
   id: string;
@@ -16,14 +27,25 @@ export interface Zone {
   targetTempC: number | null;
   /** Whether an overlay / manual setpoint is active. */
   overlayActive: boolean;
+  /** ISO timestamp when a timed overlay ends (local tracker or fixture). */
+  overlayEndsAt?: string | null;
   /** Heating power hint 0–100, if available. */
   heatingPowerPercent: number | null;
+  /** Relative humidity 0–100, if a sensor is present. */
+  humidityPercent?: number | null;
+  /**
+   * True when the room appears to follow schedule (no local manual overlay).
+   * Not a full Smart Schedule — indicator only until a schedule source exists.
+   */
+  onSchedule?: boolean;
   /** ISO timestamp of last bridge update. */
   updatedAt: string | null;
   /** HAP accessory aids controlled by this room tile (aggregated). */
   deviceIds?: string[];
   /** Number of thermostats folded into this room. */
   deviceCount?: number;
+  /** Devices belonging to this room (for detail screen). */
+  devices?: ZoneDevice[];
   /** Where the friendly name came from. */
   nameSource?: ZoneNameSource;
 }
@@ -65,6 +87,12 @@ export interface ZonesResponse {
   zones: Zone[];
   source: "mock" | "bridge" | "empty";
   naming?: ZoneNamingInfo;
+  /** Home/Away — not available via local HAP on V3 bridge. */
+  presence?: {
+    mode: "unknown" | "home" | "away";
+    source: "none" | "cloud" | "manual";
+    message: string;
+  };
 }
 
 /** Cloud OAuth / metadata link status (names only — not live control). */
