@@ -7,7 +7,6 @@ import { useEffect, useRef, useState } from "react";
 import type { HeatupPrediction, Zone } from "@heizplan/shared";
 import {
   clearZoneOverlay,
-  fetchCloudSyncStatus,
   fetchHeatupSummary,
   setZonePower,
   setZoneTemperature,
@@ -20,6 +19,7 @@ import {
 } from "../lib/zoneDisplay";
 import {
   CloseIcon,
+  HandIcon,
   HeatWavesIcon,
   PencilIcon,
   PowerIcon,
@@ -56,8 +56,11 @@ function tempFromY(clientY: number, rect: DOMRect): number {
   return Math.round(Math.min(MAX_T, Math.max(MIN_T, raw)) * 2) / 2;
 }
 
-/** True when room is off the Smart Schedule (manual or calendar). */
+/** True when room is off the Smart Schedule (manual, calendar, or setpoint drift). */
 function isOverrideActive(zone: Zone): boolean {
+  if (zone.followsSchedule === false) {
+    return true;
+  }
   return (
     zone.overlayControl === "manual" ||
     zone.overlayControl === "calendar" ||
@@ -65,18 +68,37 @@ function isOverrideActive(zone: Zone): boolean {
   );
 }
 
+function isCalendarOverride(zone: Zone): boolean {
+  return (
+    zone.offScheduleReason === "calendar" ||
+    zone.overlayControl === "calendar" ||
+    Boolean(zone.overlayActive && zone.calendarRuleName)
+  );
+}
+
 function footerStatusLabel(zone: Zone, off: boolean): string {
-  if (zone.overlayControl === "calendar" || (zone.overlayActive && zone.calendarRuleName)) {
+  if (isCalendarOverride(zone)) {
     const rule = zone.calendarRuleName?.trim();
-    return rule ? `Terminsteuerung · ${rule}` : "Terminsteuerung";
+    return rule ? `Termin · ${rule}` : "Terminsteuerung";
   }
-  if (zone.overlayControl === "manual" || zone.overlayActive) {
+  if (zone.offScheduleReason === "setpoint_mismatch") {
+    return "Abweichung vom Zeitplan";
+  }
+  if (
+    zone.offScheduleReason === "manual_overlay" ||
+    zone.overlayControl === "manual" ||
+    zone.overlayActive
+  ) {
     return "Manuelle Überschreibung";
   }
   if (off) {
     return "Aus / Frostschutz";
   }
-  return "Folgt dem Zeitplan";
+  if (zone.followsSchedule === true) {
+    return "Folgt dem Zeitplan";
+  }
+  // No schedule cache — never claim “on schedule”.
+  return "Zeitplan nicht geladen";
 }
 
 export function RoomDetail({
@@ -92,8 +114,6 @@ export function RoomDetail({
   const [draft, setDraft] = useState(zone.targetTempC ?? 20);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [homeSyncedAt, setHomeSyncedAt] = useState<string | null>(null);
-  const [scheduleSyncedAt, setScheduleSyncedAt] = useState<string | null>(null);
   const [heatup, setHeatup] = useState<HeatupPrediction | null>(null);
   const trackRef = useRef<HTMLDivElement>(null);
   const dragging = useRef(false);
@@ -104,6 +124,7 @@ export function RoomDetail({
     }
   }, [zone.id, zone.targetTempC]);
 
+<<<<<<< HEAD
   /** Disk-only sync stamps — opening a room must not hit Tado cloud. */
   useEffect(() => {
     let cancelled = false;
@@ -126,6 +147,8 @@ export function RoomDetail({
     };
   }, [zone.id]);
 
+=======
+>>>>>>> origin/cursor/room-overlay-footer-3c19
   useEffect(() => {
     if (
       zone.heatupHint?.recommendedStartAt &&
@@ -171,25 +194,11 @@ export function RoomDetail({
     };
   }, [zone.id, zone.currentTempC, zone.targetTempC, zone.heatupHint]);
 
-  function formatSyncStamp(iso: string | null): string {
-    if (!iso) {
-      return "—";
-    }
-    const d = new Date(iso);
-    if (Number.isNaN(d.getTime())) {
-      return "—";
-    }
-    return d.toLocaleString("de-DE", {
-      day: "2-digit",
-      month: "2-digit",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-  }
-
   const off = heatMode(zone) === "off";
   const heating = isActivelyHeating(zone);
   const overrideActive = isOverrideActive(zone);
+  const calendarActive = isCalendarOverride(zone);
+  const statusLabel = footerStatusLabel(zone, off);
   const fillPct = Math.min(100, Math.max(8, ((draft - MIN_T) / (MAX_T - MIN_T)) * 100));
   const bg = detailBackground(zone);
 
@@ -298,13 +307,6 @@ export function RoomDetail({
           </p>
         ) : null}
       </div>
-
-      <p className="room-detail__sync-stamp">
-        Cloud Home {formatSyncStamp(homeSyncedAt)}
-        {" · "}
-        Zeitplan {formatSyncStamp(scheduleSyncedAt)}
-        {" (Sync im Zeitplan)"}
-      </p>
 
       {heatup?.recommendedStartAt && heatup.estimatedMinutes != null ? (
         <p className="heatup-hint" role="status">
@@ -439,13 +441,19 @@ export function RoomDetail({
 
         <footer className="room-detail__footer">
           <div className="room-detail__footer-main">
-            {!overrideActive ? <ScheduleIcon /> : null}
-            <span>{footerStatusLabel(zone, off)}</span>
+            {calendarActive ? (
+              <ScheduleIcon className="room-detail__footer-icon" />
+            ) : overrideActive ? (
+              <HandIcon className="room-detail__footer-icon" />
+            ) : (
+              <ScheduleIcon className="room-detail__footer-icon" />
+            )}
+            <span className="room-detail__footer-label">{statusLabel}</span>
           </div>
           <button
             type="button"
             className="room-detail__edit"
-            aria-label="Overlay bearbeiten"
+            aria-label="Solltemperatur bestätigen"
             disabled={!interactive || off}
             onClick={() => {
               if (!interactive || off) {

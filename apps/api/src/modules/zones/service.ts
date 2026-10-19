@@ -12,7 +12,7 @@ import {
   loadActiveOverrides,
 } from "../calendar/store.js";
 import { getCachedZoneMetadata, getCloudStatus } from "../cloud/service.js";
-import { loadRoomMap } from "../cloud/store.js";
+import { loadRoomMap, loadScheduleCache } from "../cloud/store.js";
 import {
   aggregateRooms,
   resolveDeviceIds,
@@ -30,6 +30,7 @@ import {
   clearOverlayRecord,
   setOverlay,
 } from "./overlay-store.js";
+import { resolveScheduleSetpointNow } from "./schedule-setpoint.js";
 import {
   attachHeatupHints,
   observeAllZonesHeatup,
@@ -288,8 +289,13 @@ async function finishZones(
   // Capture heat-up samples from live (or mock-ramped) snapshots.
   await observeAllZonesHeatup(afterAuto);
   const withHints = await attachHeatupHints(afterAuto);
-  const activeCalendar = await loadActiveOverrides(config.bridgeDataDir);
-  const withControl = enrichZonesWithOverlayControl(withHints, activeCalendar);
+  const [activeCalendar, scheduleCache] = await Promise.all([
+    loadActiveOverrides(config.bridgeDataDir),
+    loadScheduleCache(config.bridgeDataDir),
+  ]);
+  const withControl = enrichZonesWithOverlayControl(withHints, activeCalendar, {
+    schedules: scheduleCache.schedules,
+  });
   return { zones: withControl, source, naming, presence };
 }
 
@@ -431,16 +437,37 @@ export async function clearZoneOverlay(
     }
   }
 
+  // HAP clearOverlay only flips heat mode — restore cached schedule setpoint
+  // so “Zeitplan fortsetzen” actually returns to the timeline.
+  let scheduleTempC: number | null | undefined;
+  try {
+    const cache = await loadScheduleCache(config.bridgeDataDir);
+    const schedule = cache.schedules[zoneId];
+    if (schedule) {
+      scheduleTempC = resolveScheduleSetpointNow(schedule).tempC;
+    }
+  } catch (err) {
+    console.warn(
+      "[zones] schedule cache for resume:",
+      err instanceof Error ? err.message : err,
+    );
+  }
+
   if (!status.paired && config.useMockZones) {
     const prev = MOCK_ZONE_STATE.get(zoneId) ?? {};
+    const nextTemp =
+      scheduleTempC !== undefined ? scheduleTempC : (prev.targetTempC ?? 20);
     MOCK_ZONE_STATE.set(zoneId, {
       ...prev,
       overlayActive: false,
       onSchedule: true,
+      followsSchedule: scheduleTempC !== undefined ? true : null,
       overlayControl: "none",
+      offScheduleReason: null,
+      scheduleTargetTempC: scheduleTempC ?? null,
       calendarRuleName: null,
       calendarRuleId: null,
-      targetTempC: prev.targetTempC ?? 20,
+      targetTempC: nextTemp,
     });
     return;
   }
@@ -452,6 +479,9 @@ export async function clearZoneOverlay(
   for (const deviceId of deviceIds) {
     try {
       await paired.clearOverlay(deviceId);
+      if (scheduleTempC != null && paired.setTargetTemperature) {
+        await paired.setTargetTemperature(deviceId, scheduleTempC);
+      }
     } catch (err) {
       const message =
         err instanceof Error ? err.message : `device ${deviceId} failed`;
