@@ -8,6 +8,7 @@ import type { CloudQuotaStatus, HealthStatus, ZonesResponse } from "@heizplan/sh
 import { fetchCloudQuota, fetchHealth, fetchZones } from "./api";
 import { BottomNav, type NavTab } from "./components/BottomNav";
 import { BridgeStatus } from "./components/BridgeStatus";
+import { CloudLinkPanel } from "./components/CloudLinkPanel";
 import { CloudQuotaBadge } from "./components/CloudQuotaBadge";
 import { MoreScreen } from "./components/MoreScreen";
 import { QuickActions } from "./components/QuickActions";
@@ -236,6 +237,18 @@ export function App() {
             </div>
           ) : null}
 
+          {!offline &&
+          health?.bridge.paired &&
+          zones?.naming &&
+          zones.naming.source !== "cloud" &&
+          zones.naming.source !== "map" ? (
+            <div className="callout callout--names" role="status">
+              <strong>Nur Radiator-Labels.</strong> Zone-Namen (Büro, Bad, …) kommen aus einmaligem
+              Cloud-Metadata-Sync — nicht aus HomeKit.
+              <CloudLinkPanel naming={zones.naming} onLinked={() => void load({ quiet: true })} />
+            </div>
+          ) : null}
+
           {!offline ? (
             <>
               <QuickActions
@@ -275,6 +288,7 @@ export function App() {
           }}
           quotaLoading={quotaLoading}
           quotaUnavailable={quotaUnavailable}
+          onZonesRefresh={() => void load({ quiet: true })}
         />
       ) : null}
 

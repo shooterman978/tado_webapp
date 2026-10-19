@@ -17,6 +17,7 @@ import {
   saveCloudQuotaLimit,
   saveOpenWindowSettings,
 } from "../api";
+import { CloudLinkPanel } from "./CloudLinkPanel";
 import { CloudQuotaBadge, formatQuotaLabel } from "./CloudQuotaBadge";
 import { ChevronIcon } from "./icons";
 
@@ -29,6 +30,7 @@ interface SettingsScreenProps {
   onQuotaChange: (quota: CloudQuotaStatus) => void;
   quotaLoading?: boolean;
   quotaUnavailable?: string | null;
+  onZonesRefresh?: () => void;
 }
 
 interface RowProps {
@@ -66,6 +68,7 @@ export function SettingsScreen({
   onQuotaChange,
   quotaLoading = false,
   quotaUnavailable = null,
+  onZonesRefresh,
 }: SettingsScreenProps) {
   const [ow, setOw] = useState<OpenWindowSettings | null>(null);
   const [owError, setOwError] = useState<string | null>(null);
@@ -152,6 +155,11 @@ export function SettingsScreen({
           }
         />
         <Row label="Personen" glyph="P" muted />
+      </div>
+
+      <p className="settings__section-label">Cloud / Raumnamen</p>
+      <div className="settings-group settings-group--quota">
+        <CloudLinkPanel naming={zones?.naming} onLinked={onZonesRefresh} />
       </div>
 
       <p className="settings__section-label">Cloud-Quota</p>

@@ -1,5 +1,8 @@
 import type {
+  CloudAuthPollResult,
+  CloudAuthStart,
   CloudQuotaStatus,
+  CloudStatus,
   HealthStatus,
   OpenWindowSettings,
   ZoneSchedule,
@@ -142,6 +145,36 @@ export async function setZoneWindowOpen(
   open: boolean,
 ): Promise<void> {
   await postJson(`/api/zones/${encodeURIComponent(zoneId)}/window`, { open });
+}
+
+export function fetchCloudStatus(): Promise<CloudStatus> {
+  return getJson<CloudStatus>("/api/cloud/status");
+}
+
+export function startCloudAuth(): Promise<CloudAuthStart> {
+  return postJsonResult<CloudAuthStart>("/api/cloud/auth/start");
+}
+
+export async function pollCloudAuth(): Promise<CloudAuthPollResult> {
+  const res = await fetch("/api/cloud/auth/poll", {
+    method: "POST",
+    headers: { Accept: "application/json", "Content-Type": "application/json" },
+  });
+  // 202 = still pending — not an error for the device-code flow.
+  if (!res.ok && res.status !== 202) {
+    throw await parseError(res);
+  }
+  return res.json() as Promise<CloudAuthPollResult>;
+}
+
+export function syncCloudMetadata(): Promise<{
+  ok: boolean;
+  syncedAt: string;
+  homeName: string;
+  deviceCount: number;
+  cloud: CloudStatus;
+}> {
+  return postJsonResult("/api/cloud/sync");
 }
 
 export function fetchCloudQuota(): Promise<CloudQuotaStatus> {

@@ -798,6 +798,65 @@ input {
   border: 1px dashed #3a3a3c;
 }
 
+.callout--names {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.cloud-link {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  font-size: 0.84rem;
+}
+
+.cloud-link__status {
+  margin: 0;
+  font-weight: 650;
+}
+
+.cloud-link__hint,
+.cloud-link__msg {
+  margin: 0;
+  color: var(--ink-muted);
+  font-size: 0.78rem;
+}
+
+.cloud-link__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.cloud-link__btn {
+  appearance: none;
+  border: none;
+  border-radius: 0.7rem;
+  background: #0a84ff;
+  color: #fff;
+  font-weight: 650;
+  padding: 0.55rem 0.85rem;
+  cursor: pointer;
+}
+
+.cloud-link__btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.cloud-link__pending {
+  padding: 0.65rem 0.75rem;
+  border-radius: 0.75rem;
+  background: #1c2a3a;
+}
+
+.cloud-link__pending a {
+  color: #64b5f6;
+  font-weight: 650;
+  word-break: break-all;
+}
+
 .cloud-quota-badge__warn {
   font-weight: 700;
 }
