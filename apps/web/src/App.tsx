@@ -15,6 +15,7 @@ import { MoreScreen } from "./components/MoreScreen";
 import { QuickActions } from "./components/QuickActions";
 import { RoomDetail } from "./components/RoomDetail";
 import { RoomGrid } from "./components/RoomGrid";
+import { CalendarRulesScreen } from "./components/CalendarRulesScreen";
 import { ScheduleScreen } from "./components/ScheduleScreen";
 import { SettingsScreen } from "./components/SettingsScreen";
 import { ChevronDownIcon } from "./components/icons";
@@ -26,7 +27,8 @@ const HOME_NAME_KEY = "heizplan.homeName";
 type Overlay =
   | { kind: "none" }
   | { kind: "room"; zoneId: string }
-  | { kind: "schedule"; zoneId: string };
+  | { kind: "schedule"; zoneId: string }
+  | { kind: "calendar-rules"; zoneId?: string };
 
 function readBool(key: string, fallback: boolean): boolean {
   try {
@@ -161,6 +163,23 @@ export function App() {
       ? zones?.zones.find((z) => z.id === overlay.zoneId)
       : undefined;
 
+  if (overlay.kind === "calendar-rules") {
+    return (
+      <div className="app-shell app-shell--overlay">
+        <CalendarRulesScreen
+          zones={zones?.zones ?? []}
+          focusRoomId={overlay.zoneId ?? null}
+          onBack={() =>
+            overlay.zoneId
+              ? setOverlay({ kind: "schedule", zoneId: overlay.zoneId })
+              : setOverlay({ kind: "none" })
+          }
+          onQuotaChange={setQuota}
+        />
+      </div>
+    );
+  }
+
   if (overlay.kind === "schedule" && roomZone) {
     return (
       <div className="app-shell app-shell--overlay">
@@ -168,6 +187,9 @@ export function App() {
           zone={roomZone}
           onBack={() => setOverlay({ kind: "room", zoneId: roomZone.id })}
           onQuotaChange={setQuota}
+          onOpenCalendarRules={() =>
+            setOverlay({ kind: "calendar-rules", zoneId: roomZone.id })
+          }
         />
       </div>
     );
@@ -304,6 +326,7 @@ export function App() {
           quotaLoading={quotaLoading}
           quotaUnavailable={quotaUnavailable}
           onZonesRefresh={() => void load({ quiet: true })}
+          onOpenCalendarRules={() => setOverlay({ kind: "calendar-rules" })}
         />
       ) : null}
 

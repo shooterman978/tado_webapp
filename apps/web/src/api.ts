@@ -1,4 +1,9 @@
 import type {
+  CalendarConnectionStatus,
+  CalendarConnectionUpdate,
+  CalendarEvaluateResult,
+  CalendarRule,
+  CalendarStatusResponse,
   CloudAuthPollResult,
   CloudAuthStart,
   CloudQuotaLogResponse,
@@ -254,4 +259,60 @@ export function saveZoneSchedule(
   presence: "HOME" | "AWAY";
 }> {
   return putJson(`/api/cloud/schedule/${encodeURIComponent(roomId)}`, update);
+}
+
+export function fetchCalendarStatus(): Promise<CalendarStatusResponse> {
+  return getJson<CalendarStatusResponse>("/api/calendar/status");
+}
+
+export function fetchCalendarConnection(): Promise<CalendarConnectionStatus> {
+  return getJson<CalendarConnectionStatus>("/api/calendar/connection");
+}
+
+export function saveCalendarConnection(
+  body: CalendarConnectionUpdate,
+): Promise<CalendarConnectionStatus> {
+  return putJson<CalendarConnectionStatus>("/api/calendar/connection", body);
+}
+
+export async function deleteCalendarConnection(): Promise<CalendarConnectionStatus> {
+  const res = await fetch("/api/calendar/connection", {
+    method: "DELETE",
+    headers: { Accept: "application/json" },
+  });
+  if (!res.ok) {
+    throw await parseError(res);
+  }
+  return res.json() as Promise<CalendarConnectionStatus>;
+}
+
+export function refreshCalendarConnection(): Promise<CalendarConnectionStatus> {
+  return postJsonResult<CalendarConnectionStatus>("/api/calendar/connection/refresh");
+}
+
+export function createCalendarRule(
+  body: Partial<CalendarRule>,
+): Promise<CalendarRule> {
+  return postJsonResult<CalendarRule>("/api/calendar/rules", body);
+}
+
+export function updateCalendarRule(
+  id: string,
+  body: Partial<CalendarRule>,
+): Promise<CalendarRule> {
+  return putJson<CalendarRule>(`/api/calendar/rules/${encodeURIComponent(id)}`, body);
+}
+
+export async function deleteCalendarRule(id: string): Promise<void> {
+  const res = await fetch(`/api/calendar/rules/${encodeURIComponent(id)}`, {
+    method: "DELETE",
+    headers: { Accept: "application/json" },
+  });
+  if (!res.ok) {
+    throw await parseError(res);
+  }
+}
+
+export function evaluateCalendarRules(): Promise<CalendarEvaluateResult> {
+  return postJsonResult<CalendarEvaluateResult>("/api/calendar/evaluate");
 }

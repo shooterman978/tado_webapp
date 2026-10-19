@@ -1,15 +1,11 @@
 /**
  * Smart Schedule orchestration — cloud GET/PUT with quota-aware writes.
  *
- * Extension hook (Phase Calendar — not wired yet):
- *   A future CalendarOverride layer should sit *above* this module:
- *   1. Resolve the "base" schedule via {@link getZoneSchedule} / local cache.
- *   2. Apply time-bounded calendar rules → effective setpoint / overlay.
- *   3. Either push a temporary cloud timetable write (counts against CloudQuota;
- *      use {@link getCloudQuota}.resetsAt / remaining to decide re-apply windows)
- *      OR prefer a local HAP overlay (no cloud spend) when the bridge can hold it.
- *   Priority sketch: CalendarOverride > manual room overlay > Smart Schedule (cloud).
- *   Do not invent a second quota counter — reuse CloudQuota for any cloud write.
+ * CalendarOverride (see modules/calendar) sits *above* this module:
+ *   1. Baseline via {@link getZoneSchedule} / local cache.
+ *   2. Time-bounded calendar rules → HAP overlay (preferred, 0 cloud) or
+ *      temporary cloud write (same CloudQuota; check remaining / resetsAt).
+ *   Priority: CalendarOverride > manual room overlay > Smart Schedule (cloud).
  *
  * @package @heizplan/api
  */

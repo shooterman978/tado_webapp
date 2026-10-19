@@ -48,9 +48,12 @@ export const config = {
    */
   cloudAutoSyncHours: Number(env("CLOUD_AUTO_SYNC_HOURS", "4")),
   /**
-   * Extension points (not wired in MVP scaffold):
-   * - DATABASE_URL → rules, learning samples, sync audit
-   * - HA_URL / HA_TOKEN → Home Assistant sync
-   * - ICAL_* → CalDAV calendar sync
+   * Extension points:
+   * - DATABASE_URL → learning samples, sync audit (later)
+   * - HA_URL / HA_TOKEN → Home Assistant sync (later)
+   * - ICAL_URL / ICAL_USER / ICAL_APP_PASSWORD → optional CalDAV bootstrap
+   *   (preferred: Settings UI → calendar-credentials.json in volume)
    */
+  /** Background calendar evaluate interval (ms). 0 = disabled. */
+  calendarPollMs: Number(env("CALENDAR_POLL_MS", "60000")),
 } as const;

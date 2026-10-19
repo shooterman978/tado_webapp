@@ -32,6 +32,7 @@ interface SettingsScreenProps {
   quotaLoading?: boolean;
   quotaUnavailable?: string | null;
   onZonesRefresh?: () => void;
+  onOpenCalendarRules?: () => void;
 }
 
 interface RowProps {
@@ -70,6 +71,7 @@ export function SettingsScreen({
   quotaLoading = false,
   quotaUnavailable = null,
   onZonesRefresh,
+  onOpenCalendarRules,
 }: SettingsScreenProps) {
   const [ow, setOw] = useState<OpenWindowSettings | null>(null);
   const [owError, setOwError] = useState<string | null>(null);
@@ -161,6 +163,25 @@ export function SettingsScreen({
       <p className="settings__section-label">Cloud / Raumnamen</p>
       <div className="settings-group settings-group--quota">
         <CloudLinkPanel naming={zones?.naming} onLinked={onZonesRefresh} />
+      </div>
+
+      <p className="settings__section-label">Kalenderregeln</p>
+      <div className="settings-group settings-group--quota">
+        <button
+          type="button"
+          className="settings-row settings-row--button"
+          onClick={onOpenCalendarRules}
+        >
+          <span className="settings-row__circle" style={{ background: "#c0392b" }} aria-hidden="true">
+            K
+          </span>
+          <span className="settings-row__label">iCloud / Regeln verwalten</span>
+          <ChevronIcon className="settings-row__chev" />
+        </button>
+        <p className="settings__hint settings__hint--inline">
+          Event-Match (z. B. Titel enthält „Büro“) überschreibt den Tado-Zeitplan per HAP-Overlay.
+          Cloud-Writes nur wenn nötig und Quota übrig.
+        </p>
       </div>
 
       <p className="settings__section-label">Cloud-Quota</p>
@@ -329,6 +350,18 @@ export function SettingsScreen({
           circle="#e67e22"
           trailing={<span className="settings-row__meta">Cloud-Sync</span>}
         />
+        <button
+          type="button"
+          className="settings-row settings-row--button"
+          onClick={onOpenCalendarRules}
+        >
+          <span className="settings-row__circle" style={{ background: "#c0392b" }} aria-hidden="true">
+            K
+          </span>
+          <span className="settings-row__label">Kalenderregeln</span>
+          <span className="settings-row__meta">iPhone</span>
+          <ChevronIcon className="settings-row__chev" />
+        </button>
         <Row label="Raumluft-Komfort" glyph="L" circle="#1abc9c" muted />
       </div>
 
@@ -348,7 +381,7 @@ export function SettingsScreen({
       </div>
 
       <p className="settings__hint">
-        Steuerung lokal (HomeKit). Kein Kalender/Learning. Produktname: Heizplan.
+        Steuerung lokal (HomeKit). Kalenderregeln optional via CalDAV. Produktname: Heizplan.
       </p>
     </div>
   );

@@ -8,6 +8,7 @@ import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { logger } from "hono/logger";
 import { bridgeRoutes } from "./routes/bridge.js";
+import { calendarRoutes } from "./routes/calendar.js";
 import { cloudRoutes } from "./routes/cloud.js";
 import { healthRoutes } from "./routes/health.js";
 import { zonesRoutes } from "./routes/zones.js";
@@ -20,7 +21,7 @@ export function createApp(): Hono {
     "*",
     cors({
       origin: (origin) => origin || "*",
-      allowMethods: ["GET", "POST", "PUT", "PATCH", "OPTIONS"],
+      allowMethods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
       allowHeaders: ["Content-Type", "Authorization"],
     }),
   );
@@ -29,6 +30,7 @@ export function createApp(): Hono {
   app.route("/api/zones", zonesRoutes);
   app.route("/api/bridge", bridgeRoutes);
   app.route("/api/cloud", cloudRoutes);
+  app.route("/api/calendar", calendarRoutes);
 
   app.get("/", (c) =>
     c.json({
@@ -44,6 +46,9 @@ export function createApp(): Hono {
         "/api/cloud/quota",
         "/api/cloud/quota/log",
         "/api/cloud/schedule/:roomId",
+        "/api/calendar/status",
+        "/api/calendar/rules",
+        "/api/calendar/evaluate",
       ],
     }),
   );

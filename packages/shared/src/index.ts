@@ -325,29 +325,128 @@ export interface CloudAuthPollResult {
 }
 
 /**
- * Extension hooks (Phase Calendar — not wired yet).
- *
- * Intended priority when calendar lands:
+ * CalendarOverride layer — priority above manual overlay and cloud baseline:
  *   CalendarOverride (time-bounded) > manual room overlay > Smart Schedule (cloud baseline)
  *
- * Implementation sketch (do not build here):
- * - Read baseline via GET /api/cloud/schedule/:roomId
- * - Decide write path: local HAP overlay (preferred, 0 cloud) OR temporary
- *   cloud timetable/overlay write via schedule-service (uses CloudQuota)
- * - Use CloudQuotaStatus.resetsAt / remaining to schedule re-apply / restore
- *   of the baseline after the event ends or after Berlin day reset
+ * Prefer HAP overlay (0 cloud spend). Cloud writes reuse CloudQuota
+ * (`remaining` / `resetsAt`) via schedule-service — never a second counter.
  */
+
+/** How a calendar event title is matched. */
+export type CalendarMatchKind =
+  | "title_contains"
+  | "title_equals"
+  | "title_regex";
+
+/** Where the override is applied. */
+export type CalendarApplyPath = "hap_overlay" | "cloud_write";
+
+export type CalendarRuleMode = "heat" | "off" | "eco";
+
+export interface CalendarRuleMatch {
+  kind: CalendarMatchKind;
+  /** e.g. "Büro" — compared case-insensitively for contains/equals. */
+  value: string;
+}
+
+/** Persisted user rule (no secrets). */
+export interface CalendarRule {
+  id: string;
+  name: string;
+  enabled: boolean;
+  /**
+   * Restrict to one discovered calendar href/id; null = all calendars
+   * on the configured CalDAV account.
+   */
+  calendarId: string | null;
+  match: CalendarRuleMatch;
+  /** PWA room ids (`room-z12` / fixture ids). */
+  roomIds: string[];
+  mode: CalendarRuleMode;
+  /** Required when mode is heat/eco; ignored for off. */
+  targetTempC: number | null;
+  /**
+   * Default hap_overlay (local, quota-free).
+   * cloud_write only when remaining > 0 and the engine opts in.
+   */
+  applyPath: CalendarApplyPath;
+  /** Higher wins when multiple rules match the same room. */
+  priority: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** @deprecated Use {@link CalendarRule} — kept for earlier schedule-sync hooks. */
 export interface CalendarRuleHook {
-  /** Keyword / title match against CalDAV events. */
   matchValue: string;
   roomId: string;
   targetTempC: number | null;
-  mode: "heat" | "off" | "eco";
-  /**
-   * When set, override ends at this ISO time — restore baseline schedule
-   * (cloud re-PUT or clear local overlay). Check CloudQuota.remaining first.
-   */
+  mode: CalendarRuleMode;
   endsAt?: string | null;
+}
+
+/** Public connection status — never includes the app password. */
+export interface CalendarConnectionStatus {
+  configured: boolean;
+  /** CalDAV base URL (e.g. https://caldav.icloud.com). */
+  url: string | null;
+  username: string | null;
+  /** Apple ID / CalDAV user is set (password never exposed). */
+  hasPassword: boolean;
+  /** Last successful CalDAV discovery / event fetch. */
+  lastOkAt: string | null;
+  lastError: string | null;
+  calendars: CalendarInfo[];
+}
+
+export interface CalendarInfo {
+  id: string;
+  href: string;
+  displayName: string;
+}
+
+/** Body to save CalDAV credentials (password write-only). */
+export interface CalendarConnectionUpdate {
+  url: string;
+  username: string;
+  /** Omit or empty to keep the previously stored password. */
+  appPassword?: string;
+}
+
+/** One currently applied calendar override (runtime + persisted). */
+export interface CalendarActiveOverride {
+  ruleId: string;
+  ruleName: string;
+  roomId: string;
+  eventUid: string;
+  eventSummary: string;
+  startsAt: string;
+  endsAt: string;
+  appliedAt: string;
+  applyPath: CalendarApplyPath;
+  targetTempC: number | null;
+  mode: CalendarRuleMode;
+  /** Cloud path: baseline restore still pending after endsAt. */
+  needsRestore: boolean;
+}
+
+export interface CalendarEvaluateResult {
+  matched: number;
+  applied: number;
+  cleared: number;
+  skippedQuota: number;
+  active: CalendarActiveOverride[];
+  quota: CloudQuotaStatus;
+  eventsFetched: number;
+  evaluatedAt: string;
+  message: string;
+}
+
+export interface CalendarStatusResponse {
+  connection: CalendarConnectionStatus;
+  rules: CalendarRule[];
+  active: CalendarActiveOverride[];
+  quota: CloudQuotaStatus;
 }
 
 export interface HeatupLearningHook {

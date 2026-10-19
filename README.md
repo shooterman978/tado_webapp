@@ -172,22 +172,23 @@ Vor erstem HAP-Pairing:
 - UI: Badge „Heute: X / Y Cloud-Requests“; bei Limit → 429 + klare Meldung.
 - Smart Schedule: Home = Timetable-Blöcke; Away = `awayConfiguration` (fester Soll in der Tado-API).
 
-### Hook für späteren CalendarOverride (nicht in diesem PR)
+### CalendarOverride (CalDAV / iPhone)
 
-Priorität skizziert: `CalendarOverride` (zeitlich) > manuelles Raum-Overlay > Smart Schedule (Cloud-Baseline).
+Priorität: `CalendarOverride` (zeitlich) > manuelles Raum-Overlay > Smart Schedule (Cloud-Baseline).
 
-1. Baseline lesen: `GET /api/cloud/schedule/:roomId` bzw. `getCachedZoneSchedule()` (Cache).
-2. Kurzfristig: lokales HAP-Overlay bevorzugen (0 Cloud-Spend).
-3. Wenn Cloud-Write nötig: über `schedule-service` / dieselbe CloudQuota; `remaining` + `resetsAt` für Re-Apply/Restore nach Event-Ende oder Berlin-Mitternacht.
-4. Typed placeholder: `CalendarRuleHook` in `@heizplan/shared` (+ Kommentare in `schedule-service.ts`).
+1. Settings / Mehr / Zeitplan → **Kalenderregeln**: iCloud CalDAV (Apple-ID + App-Passwort).
+2. Regel z. B. Titel enthält „Büro“ → Räume + Soll; Apply-Pfad default **HAP-Overlay** (0 Cloud).
+3. `POST /api/calendar/evaluate` bzw. Poll (`CALENDAR_POLL_MS`); Cloud-Writes nur wenn `applyPath=cloud_write` und `remaining > 0`.
+4. Secrets nur in Volume `calendar-credentials.json` — nie committen/loggen.
+5. Baseline weiter via Schedule-Cache / Sync-Button (`getCachedZoneSchedule`).
 
 ---
 
 ## Erweiterungspunkte (noch nicht gebaut)
 
-- Kalenderregeln (CalDAV) → `CalendarRuleHook` / CalendarOverride-Layer
 - Heat-up-Learning → `HeatupLearningHook`
 - HA-Sync (REST/WS, kein zweiter HomeKit-Slot)
+- Temporäre Cloud-Timetable-Mutation für Calendar (aktuell HAP-Fallback)
 
 ---
 

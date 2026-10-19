@@ -2,9 +2,9 @@
  * Smart Schedule editor — Home timetable + Away config, cloud sync.
  * Layout from screenshot 02; writes go to Tado cloud (visible in official app).
  *
- * CalendarOverride (later): this screen edits the *baseline* cloud plan.
- * Time-bounded calendar rules should layer above via HAP overlay or temporary
- * cloud writes — see CalendarRuleHook in @heizplan/shared and schedule-service.
+ * This screen edits the *baseline* cloud plan. CalendarOverride rules layer
+ * above via HAP overlay (preferred) or temporary cloud writes — see
+ * CalendarRulesScreen and modules/calendar.
  *
  * @package @heizplan/web
  */
@@ -32,6 +32,8 @@ interface ScheduleScreenProps {
   zone: Zone;
   onBack: () => void;
   onQuotaChange?: (quota: CloudQuotaStatus) => void;
+  /** Open calendar rules UI (CalendarOverride above this baseline). */
+  onOpenCalendarRules?: () => void;
 }
 
 const DAY_LABELS: Record<ScheduleDayType, string> = {
@@ -127,6 +129,7 @@ export function ScheduleScreen({
   zone,
   onBack,
   onQuotaChange,
+  onOpenCalendarRules,
 }: ScheduleScreenProps) {
   const [presence, setPresence] = useState<SchedulePresence>("HOME");
   const [schedule, setSchedule] = useState<ZoneSchedule | null>(null);
@@ -361,7 +364,8 @@ export function ScheduleScreen({
       <h2 className="schedule__heading">Intelligenter Zeitplan</h2>
       <p className="schedule__note">
         Anzeige aus lokalem Cache. Cloud-Abruf nur über den Sync-Button (zählt gegen das Tageslimit).
-        Speichern schreibt in die Tado-Cloud; Ist/Soll bleibt lokal (HomeKit).
+        Speichern schreibt in die Tado-Cloud; Ist/Soll bleibt lokal (HomeKit). Kalenderregeln können
+        diesen Plan zeitlich überschreiben.
       </p>
 
       <div className="schedule__toolbar">
@@ -373,6 +377,15 @@ export function ScheduleScreen({
         >
           {busy ? "…" : "Jetzt synchronisieren"}
         </button>
+        {onOpenCalendarRules ? (
+          <button
+            type="button"
+            className="schedule__sync schedule__sync--secondary"
+            onClick={onOpenCalendarRules}
+          >
+            Kalenderregeln
+          </button>
+        ) : null}
         <CloudQuotaBadge quota={quota} />
       </div>
       <p className="schedule__synced" aria-live="polite">
