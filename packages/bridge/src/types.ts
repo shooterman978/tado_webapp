@@ -63,8 +63,8 @@ export interface BridgeClient {
   discover(options?: DiscoverOptions): Promise<DiscoveredBridge[]>;
 
   /**
-   * Complete pairing with the 8-digit HomeKit setup code.
-   * Full HAP implementation is iterative — stub throws NotImplemented.
+   * Complete pairing with the HomeKit setup code (XXX-XX-XXX).
+   * Implementations persist long-term credentials under BRIDGE_DATA_DIR.
    */
   pairWithPin(pin: string): Promise<void>;
 

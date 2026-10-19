@@ -7,6 +7,7 @@ export function App() {
   const [health, setHealth] = useState<HealthStatus | null>(null);
   const [zones, setZones] = useState<ZonesResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [tick, setTick] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -34,14 +35,16 @@ export function App() {
       cancelled = true;
       window.clearInterval(id);
     };
-  }, []);
+  }, [tick]);
 
   const sourceLabel =
     zones?.source === "mock"
       ? "Mock-Daten"
       : zones?.source === "bridge"
-        ? "Bridge"
+        ? "Bridge (Live)"
         : "leer";
+
+  const live = zones?.source === "bridge";
 
   return (
     <div className="app-shell">
@@ -75,12 +78,17 @@ export function App() {
           {error}. API unter /api erreichbar?
         </div>
       ) : (
-        <ZoneList zones={zones?.zones ?? []} />
+        <ZoneList
+          zones={zones?.zones ?? []}
+          interactive={live}
+          onChanged={() => setTick((n) => n + 1)}
+        />
       )}
 
       <footer className="footer-note">
-        Erweiterungspunkte: Kalenderregeln, Heat-up-Learning, HA-Sync — noch
-        nicht aktiv. Pairing erst nach freiem HomeKit-Slot (Spike-CT löschen).
+        {live
+          ? "Live-Zonen über HomeKit. Kalenderregeln, Learning und HA-Sync folgen."
+          : "Mock oder ungepaart — Pairing: TADO_BRIDGE_IP + TADO_BRIDGE_PIN in .env, dann /api/bridge/pair."}
       </footer>
     </div>
   );

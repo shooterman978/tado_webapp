@@ -3,7 +3,7 @@
 Lokale Heizungssteuerung ohne TadoLocal als Dependency oder Backend:
 
 ```
-PWA (Heizplan) → API → Bridge-Schicht (HomeKit) → Tado V3 Bridge → Thermostate
+PWA (Heizplan) → API → Bridge-Schicht (HomeKit / hap-controller) → Tado V3 Bridge → Thermostate
                          └── Sync später → Home Assistant (bestehende VM)
 ```
 
@@ -20,11 +20,18 @@ Spike-Artefakte unter `deploy/tadolocal/` und [PR #1](https://github.com/shooter
 | Monorepo | **pnpm + TypeScript** | Eine Sprache für API, PWA und Shared-Types; klare Paketgrenzen; gute DX unter WSL |
 | API | **Hono** auf Node 22 | Klein, typsicher, schnell genug für Homelab; Module `bridge` / `zones` getrennt |
 | PWA | **Vite + React + vite-plugin-pwa** | Installierbar, responsiv, schlankes App-Shell |
-| Bridge | **`@heizplan/bridge` Interface + Stub** | Zuerst Vertrag & Pairing-Vorbereitung; volle HAP iterativ. Falls TS-Controller-Libs unreif → Python-Microservice (z. B. aiohomekit) hinter demselben Interface |
+| Bridge | **`hap-controller` hinter `@heizplan/bridge`** | Wartbare Node-HAP-Controller-Lib (Pair/Accessories/Characteristics). Gleiches `BridgeClient`-Interface; kein TadoLocal-Fork. Fallback später: Python/aiohomekit-Sidecar hinter demselben Vertrag, falls nötig |
 | DB | **PostgreSQL** (Compose) | Für Regeln, Learning-Samples, Sync-Audit ab Phase 1; MVP nutzt sie noch kaum |
 | Deploy | **Docker Compose** | Gleiche Images: Dev = Docker Desktop/WSL, Prod = Proxmox LXC |
 
 Kein Framework-Hype: Lesbarkeit, Modulgrenzen und dokumentierte Pairing-/Sicherheitsregeln haben Vorrang.
+
+### Warum hap-controller (nicht TadoLocal / nicht HAP von Null)?
+
+- Passt zum bestehenden TS-Monorepo (kein zweiter Runtime-Stack für MVP).
+- Deckte Pairing-API (`pairSetup`, `getAccessories`, `get/setCharacteristics`).
+- BLE-Native-Deps (`noble`) werden nicht gebaut — nur IP/HTTP zur V3-Bridge.
+- Pairing-State liegt verschlüsselt-relevant in `BRIDGE_DATA_DIR` (Compose-Volume).
 
 ---
 
@@ -36,7 +43,7 @@ apps/
   web/          # Progressive Web App
 packages/
   shared/       # Zone-, Health-, Hook-Typen
-  bridge/       # BridgeClient-Interface + StubBridgeClient
+  bridge/       # BridgeClient + HapBridgeClient (hap-controller) + Stub
 deploy/
   proxmox/      # Prod-Kurzhinweise
 docker-compose.yml
@@ -54,14 +61,26 @@ Voraussetzungen: Docker Desktop mit WSL2-Backend, Node 22+ (für Dev ohne Docker
 
 ```bash
 cp .env.example .env
-# APP_SESSION_SECRET und POSTGRES_PASSWORD setzen
+# APP_SESSION_SECRET, POSTGRES_PASSWORD,
+# TADO_BRIDGE_IP, TADO_BRIDGE_PIN (XXX-XX-XXX) setzen — nie committen
 
 docker compose -f docker-compose.yml -f compose.dev.yml up --build
 ```
 
 - PWA: http://localhost:8080  
 - API Health: http://localhost:3080/api/health  
-- Zones (Mock): http://localhost:3080/api/zones  
+- Zones: http://localhost:3080/api/zones  
+
+### Pairing
+
+```bash
+curl -sS -X POST http://localhost:3080/api/bridge/prepare-pairing | jq
+# PIN kommt aus .env (TADO_BRIDGE_PIN) — nicht in die Shell-History tippen:
+curl -sS -X POST http://localhost:3080/api/bridge/pair
+curl -sS http://localhost:3080/api/zones | jq
+```
+
+Nach erfolgreichem Pairing: `source=bridge`, Mock aus. Volume `heizplan_bridge` backupen.
 
 ### Ohne Docker (schnelle UI/API-Iteration)
 
@@ -71,9 +90,14 @@ pnpm dev:api    # :3080
 pnpm dev:web    # :5173, proxied /api → API
 ```
 
-### Pairing / mDNS unter WSL
+### Pairing / Netz unter WSL & Docker Desktop
 
-Docker Desktop NAT erschwert oft HomeKit-Discovery. UI- und API-Arbeit unter WSL ist fine; **echtes Bridge-Pairing** bevorzugt auf Proxmox im LAN validieren.
+| Thema | Realität |
+|---|---|
+| **Feste Bridge-IP** | Bevorzugt (`TADO_BRIDGE_IP`). Wie im Spike: mDNS nicht nötig. |
+| **mDNS / Bonjour** | Unter WSL oft kaputt (Multicast `EADDRINUSE` / keine Antworten). Discovery ist best-effort. |
+| **Docker Desktop NAT** | Container können typischerweise **TCP zu LAN-IPs** (Bridge Port 80). `network_mode: host` verhält sich unter Docker Desktop **nicht** wie Linux-Host-Netz — eher meiden. |
+| **Prod** | Proxmox LXC im gleichen LAN wie die V3-Bridge ist der robuste Pairing-Ort. |
 
 ---
 
@@ -99,20 +123,21 @@ Vor erstem HAP-Pairing:
 | Methode | Pfad | Zweck |
 |---|---|---|
 | GET | `/api/health` | Liveness + Bridge-Status |
-| GET | `/api/zones` | Raumliste (Mock oder Bridge) |
+| GET | `/api/zones` | Raumliste (Mock wenn unpaired, sonst Live) |
+| POST | `/api/zones/:id/temperature` | Solltemperatur setzen `{ "tempC": 20.5 }` |
 | GET | `/api/bridge/status` | Pairing-State |
 | POST | `/api/bridge/prepare-pairing` | Pairing-Vorbereitung (Instruktionen) |
-| POST | `/api/bridge/pair` | Platzhalter 501 — HAP folgt |
+| POST | `/api/bridge/pair` | HAP-Pairing (PIN aus Env oder Body — nie geloggt) |
 
 ---
 
 ## Sicherheit (Grundlagen)
 
 - Secrets nur in `.env` / Docker secrets — **nie committen**
+- `TADO_BRIDGE_PIN` niemals in Logs, Chat, PR-Diff
 - DB nicht auf `0.0.0.0` publishen (Default)
 - PWA/API im LAN oder hinter VPN; HTTPS später per Proxy
 - HomeKit-PIN und Pairing-Store nur serverseitig / Volume
-- HA-Token und CalDAV App-Passwort später nur API-seitig
 - Ein HomeKit-Controller: unsere Bridge-Schicht allein
 
 ---
@@ -122,6 +147,7 @@ Vor erstem HAP-Pairing:
 - Kalenderregeln (CalDAV) → `CalendarRuleHook` in `@heizplan/shared`
 - Heat-up-Learning → `HeatupLearningHook`
 - HA-Sync (REST/WS, kein zweiter HomeKit-Slot)
+- Freundliche Raumnamen (aktuell HAP-Gerätenamen)
 
 ---
 

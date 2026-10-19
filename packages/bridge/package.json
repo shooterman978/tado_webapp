@@ -17,9 +17,11 @@
     "lint": "echo \"no lint configured yet\""
   },
   "dependencies": {
-    "@heizplan/shared": "workspace:*"
+    "@heizplan/shared": "workspace:*",
+    "hap-controller": "0.10.2"
   },
   "devDependencies": {
+    "@types/node": "^22.13.4",
     "typescript": "^5.7.3"
   }
 }

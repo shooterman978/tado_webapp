@@ -189,6 +189,34 @@ a {
   color: var(--ember-soft);
 }
 
+.temp-controls {
+  display: flex;
+  gap: 0.4rem;
+  margin-top: 0.55rem;
+  justify-content: flex-end;
+}
+
+.temp-btn {
+  appearance: none;
+  border: 1px solid var(--line);
+  background: rgba(232, 239, 233, 0.04);
+  color: var(--ink);
+  padding: 0.25rem 0.55rem;
+  border-radius: var(--radius);
+  cursor: pointer;
+  font-size: 0.8rem;
+}
+
+.temp-btn:hover:not(:disabled) {
+  border-color: var(--ember-soft);
+  color: var(--ember-soft);
+}
+
+.temp-btn:disabled {
+  opacity: 0.45;
+  cursor: wait;
+}
+
 .heat-bar {
   grid-column: 1 / -1;
   height: 3px;

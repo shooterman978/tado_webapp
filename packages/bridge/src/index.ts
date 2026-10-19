@@ -1,9 +1,10 @@
 /**
- * @heizplan/bridge — HomeKit / Tado V3 bridge contracts + stub client.
+ * @heizplan/bridge — HomeKit / Tado V3 bridge contracts + HAP client.
  *
- * Stack note: TypeScript interface first for shared types with the API.
- * Full controller may stay in TS (if a maintained library fits) or move to a
- * small Python service (aiohomekit-class maturity) behind this same contract.
+ * Library choice: **hap-controller** (Node) in-process behind {@link BridgeClient}.
+ * Keeps the monorepo TypeScript-native; pairing state on a volume.
+ * Fallback path (not implemented): Python aiohomekit sidecar with the same contract
+ * if hap-controller ceases to fit Tado/HAP needs.
  *
  * @package @heizplan/bridge
  */
@@ -18,3 +19,14 @@ export type {
 
 export { StubBridgeClient } from "./stub-client.js";
 export type { StubBridgeOptions } from "./stub-client.js";
+
+export { HapBridgeClient } from "./hap-client.js";
+export type { HapBridgeOptions } from "./hap-client.js";
+
+export {
+  loadPairing,
+  savePairing,
+  clearPairing,
+  ensureDataDir,
+} from "./pairing-store.js";
+export type { PersistedPairing } from "./pairing-store.js";

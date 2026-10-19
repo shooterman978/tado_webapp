@@ -1,19 +1,29 @@
 # Dev overlay — Docker Desktop under WSL.
 # Usage: docker compose -f docker-compose.yml -f compose.dev.yml up --build
 #
-# Notes:
-# - Publishes web/api on localhost for browser work.
-# - Host networking / mDNS for real HomeKit pairing is often awkward under
-#   Docker Desktop NAT. Prefer pairing validation on Proxmox LAN later.
-# - DB stays internal; optional publish uncommented below for GUI tools.
+# HomeKit / LAN notes (honest):
+# - Pairing uses TADO_BRIDGE_IP + TADO_BRIDGE_PIN (fixed IP). mDNS/_hap._tcp is
+#   unreliable under Docker Desktop NAT and WSL multicast (EADDRINUSE / no replies).
+# - Containers on the default bridge network can often still TCP to LAN IPs
+#   (verified: port 80 to the V3 Bridge). Prefer that over host networking on
+#   Docker Desktop, where `network_mode: host` does not behave like Linux host net.
+# - For stubborn cases: run the API on the WSL host (`pnpm dev:api`) so it shares
+#   the WSL eth0 route to the LAN, or validate pairing on Proxmox (same L2 as Bridge).
+# - Persist pairing in volume heizplan_bridge; losing it requires re-pair (slot reset).
 
 services:
   api:
     environment:
       NODE_ENV: development
-      BRIDGE_USE_MOCK_ZONES: "true"
+      # Prefer live bridge when paired; mock only while unpaired.
+      BRIDGE_USE_MOCK_ZONES: ${BRIDGE_USE_MOCK_ZONES:-true}
+      TADO_BRIDGE_IP: ${TADO_BRIDGE_IP:-}
+      TADO_BRIDGE_PIN: ${TADO_BRIDGE_PIN:-}
+      TADO_BRIDGE_PORT: ${TADO_BRIDGE_PORT:-80}
     ports:
       - "3080:3080"
+    # Uncomment only on Linux Docker Engine (not Docker Desktop) if LAN access fails:
+    # network_mode: host
 
   web:
     ports:

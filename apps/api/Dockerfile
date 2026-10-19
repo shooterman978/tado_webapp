@@ -4,12 +4,13 @@ FROM node:22-bookworm-slim
 RUN corepack enable && corepack prepare pnpm@9.15.0 --activate
 WORKDIR /app
 
-COPY package.json pnpm-workspace.yaml ./
+COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
 COPY packages/shared/package.json packages/shared/
 COPY packages/bridge/package.json packages/bridge/
 COPY apps/api/package.json apps/api/
 
-RUN pnpm install --filter @heizplan/api...
+# hap-controller pulls optional BLE native deps (noble); we only use IP/HTTP.
+RUN pnpm install --filter @heizplan/api... --frozen-lockfile --ignore-scripts
 
 COPY packages/shared packages/shared
 COPY packages/bridge packages/bridge

@@ -13,14 +13,30 @@ function env(name: string, fallback?: string): string {
   return value;
 }
 
+function optionalEnv(name: string): string | undefined {
+  const value = process.env[name];
+  if (value === undefined || value === "") {
+    return undefined;
+  }
+  return value;
+}
+
 export const config = {
   host: env("API_HOST", "0.0.0.0"),
   port: Number(env("API_PORT", "3080")),
   version: env("APP_VERSION", "0.1.0"),
   nodeEnv: env("NODE_ENV", "development"),
-  /** Mock zones when unpaired — useful for UI work under WSL. */
+  /** Mock zones when unpaired — useful for UI work under WSL. Disabled once paired. */
   useMockZones: env("BRIDGE_USE_MOCK_ZONES", "true") === "true",
   bridgeDataDir: env("BRIDGE_DATA_DIR", "./data/bridge"),
+  /** LAN IP of the Tado V3 Internet Bridge (preferred over mDNS under WSL). */
+  bridgeIp: optionalEnv("TADO_BRIDGE_IP"),
+  /**
+   * HomeKit setup code XXX-XX-XXX — only used server-side for /api/bridge/pair.
+   * Never log or return this value.
+   */
+  bridgePin: optionalEnv("TADO_BRIDGE_PIN"),
+  bridgePort: Number(env("TADO_BRIDGE_PORT", "80")),
   /**
    * Extension points (not wired in MVP scaffold):
    * - DATABASE_URL → rules, learning samples, sync audit
