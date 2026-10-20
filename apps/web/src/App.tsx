@@ -4,15 +4,28 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { CloudQuotaStatus, HealthStatus, ZonesResponse } from "@heizplan/shared";
-import { fetchCalendarStatus, fetchCloudQuota, fetchHealth, fetchZones } from "./api";
+import type {
+  CloudQuotaStatus,
+  HealthStatus,
+  OpenWindowSettings,
+  ZonesResponse,
+} from "@heizplan/shared";
+import {
+  ApiError,
+  fetchCalendarStatus,
+  fetchCloudQuota,
+  fetchHealth,
+  fetchOpenWindowSettings,
+  fetchZones,
+  refreshHomePresence,
+} from "./api";
+import { AutomationHome } from "./components/AutomationHome";
 import { BottomNav, type NavTab } from "./components/BottomNav";
 import { BridgeStatus } from "./components/BridgeStatus";
 import { CloudLinkPanel } from "./components/CloudLinkPanel";
 import { CloudQuotaBadge } from "./components/CloudQuotaBadge";
 import { HomeCloudSync } from "./components/HomeCloudSync";
 import { MoreScreen } from "./components/MoreScreen";
-import { QuickActions } from "./components/QuickActions";
 import { RoomDetail } from "./components/RoomDetail";
 import { RoomGrid } from "./components/RoomGrid";
 import { CalendarRulesScreen } from "./components/CalendarRulesScreen";
@@ -23,8 +36,6 @@ import { ChevronDownIcon } from "./components/icons";
 const POLL_MS = 15_000;
 const HUMIDITY_KEY = "heizplan.showHumidity";
 const HOME_NAME_KEY = "heizplan.homeName";
-const CAL_TIP_DISMISS_KEY = "heizplan.calendarTipDismissed";
-
 type Overlay =
   | { kind: "none" }
   | { kind: "room"; zoneId: string }
@@ -56,7 +67,12 @@ export function App() {
   const [quota, setQuota] = useState<CloudQuotaStatus | null>(null);
   const [quotaLoading, setQuotaLoading] = useState(true);
   const [quotaUnavailable, setQuotaUnavailable] = useState<string | null>(null);
-  const [showCalendarTip, setShowCalendarTip] = useState(false);
+  const [calendarMeta, setCalendarMeta] = useState<{
+    ruleCount: number;
+    configured: boolean;
+  }>({ ruleCount: 0, configured: false });
+  const [openWindow, setOpenWindow] = useState<OpenWindowSettings | null>(null);
+  const [presenceBusy, setPresenceBusy] = useState(false);
   const [homeName] = useState(() => {
     try {
       return localStorage.getItem(HOME_NAME_KEY) || "Zuhause";
@@ -127,23 +143,47 @@ export function App() {
 
   useEffect(() => {
     let cancelled = false;
-    const dismissed = readBool(CAL_TIP_DISMISS_KEY, false);
-    if (dismissed) {
-      return;
-    }
     void fetchCalendarStatus()
       .then((s) => {
-        if (!cancelled && (s.rules?.length ?? 0) === 0) {
-          setShowCalendarTip(true);
+        if (!cancelled) {
+          setCalendarMeta({
+            ruleCount: s.rules?.length ?? 0,
+            configured: Boolean(s.connection?.configured),
+          });
         }
       })
       .catch(() => {
-        /* tip optional */
+        /* optional */
+      });
+    void fetchOpenWindowSettings()
+      .then((ow) => {
+        if (!cancelled) {
+          setOpenWindow(ow);
+        }
+      })
+      .catch(() => {
+        /* optional */
       });
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [overlay.kind]);
+
+  async function refreshPresenceFromHome(): Promise<void> {
+    setPresenceBusy(true);
+    try {
+      const res = await refreshHomePresence(true);
+      setQuota(res.quota);
+      setQuotaUnavailable(null);
+      await load({ quiet: true });
+    } catch (err) {
+      if (err instanceof ApiError && err.quota) {
+        setQuota(err.quota);
+      }
+    } finally {
+      setPresenceBusy(false);
+    }
+  }
 
   useEffect(() => {
     try {
@@ -236,14 +276,10 @@ export function App() {
           onBack={() => {
             void fetchCalendarStatus()
               .then((s) => {
-                if ((s.rules?.length ?? 0) > 0) {
-                  setShowCalendarTip(false);
-                  try {
-                    localStorage.setItem(CAL_TIP_DISMISS_KEY, "1");
-                  } catch {
-                    /* ignore */
-                  }
-                }
+                setCalendarMeta({
+                  ruleCount: s.rules?.length ?? 0,
+                  configured: Boolean(s.connection?.configured),
+                });
               })
               .catch(() => {
                 /* ignore */
@@ -324,23 +360,6 @@ export function App() {
             onRefresh={() => void load()}
           />
 
-          <CloudQuotaBadge
-            quota={quota}
-            loading={quotaLoading}
-            unavailableReason={quotaUnavailable}
-          />
-
-          {!offline ? (
-            <HomeCloudSync
-              onSynced={() => void load({ quiet: true })}
-              onQuotaChange={(q) => {
-                setQuota(q);
-                setQuotaUnavailable(null);
-                setQuotaLoading(false);
-              }}
-            />
-          ) : null}
-
           {error && offline ? (
             <div className="error-state" role="alert">
               {error}
@@ -364,47 +383,62 @@ export function App() {
             <div className="callout callout--names" role="status">
               <strong>HAP-Namen aktiv</strong>
               <span>
-                Kacheln zeigen Seriennummern (z. B. „Radiator · 5264“), nicht Büro/Bad. Einmal Tado
-                Cloud verknüpfen → echte Raumnamen + Geräte pro Zone zusammenfassen.
+                Einmal Tado Cloud verknüpfen → echte Raumnamen.
               </span>
               <CloudLinkPanel naming={zones.naming} onLinked={() => void load({ quiet: true })} />
             </div>
           ) : null}
 
-          {!offline && showCalendarTip ? (
-            <button
-              type="button"
-              className="callout callout--calendar"
-              onClick={() => setOverlay({ kind: "calendar-rules" })}
-            >
-              <strong>Termine steuern die Heizung</strong>
-              <span>
-                Kurzer Assistent: Termin wählen → Räume → Temperatur. Auch unter Einstellungen.
-              </span>
-            </button>
+          {!offline ? (
+            <AutomationHome
+              presence={zones?.presence}
+              zones={zones?.zones ?? []}
+              openWindow={openWindow}
+              calendarRuleCount={calendarMeta.ruleCount}
+              calendarConfigured={calendarMeta.configured}
+              onOpenCalendar={() => setOverlay({ kind: "calendar-rules" })}
+              onOpenWindows={() => setTab("settings")}
+              onRefreshPresence={() => void refreshPresenceFromHome()}
+              presenceBusy={presenceBusy}
+            />
+          ) : null}
+
+          <CloudQuotaBadge
+            quota={quota}
+            loading={quotaLoading}
+            unavailableReason={quotaUnavailable}
+          />
+
+          {!offline ? (
+            <HomeCloudSync
+              onSynced={() => void load({ quiet: true })}
+              onQuotaChange={(q) => {
+                setQuota(q);
+                setQuotaUnavailable(null);
+                setQuotaLoading(false);
+              }}
+            />
           ) : null}
 
           {!offline ? (
-            <>
-              <QuickActions
-                interactive={interactive}
-                zones={zones?.zones ?? []}
-                onDone={() => void load({ quiet: true })}
-              />
+            <details className="home-rooms">
+              <summary className="home-rooms__summary">
+                Räume (optional · Steuerung in der Tado-App)
+              </summary>
               <RoomGrid
                 zones={zones?.zones ?? []}
                 showHumidity={showHumidity}
                 onSelect={(zoneId) => setOverlay({ kind: "room", zoneId })}
               />
-            </>
+            </details>
           ) : null}
 
           <p id="skills-stub" className="footer-note">
             {live
-              ? "Live HomeKit · Tippe eine Kachel."
+              ? "Live · Automatisierung zuerst."
               : fixtureMode
-                ? "Fixtures · Screenshot-Parität; Live-Smoke auf Self-Hosted."
-                : "Nach Pairing: Live-Räume."}
+                ? "Fixtures · Automations-Dashboard."
+                : "Nach Pairing: Live-Status."}
           </p>
         </>
       ) : null}
@@ -425,6 +459,7 @@ export function App() {
           quotaUnavailable={quotaUnavailable}
           onZonesRefresh={() => void load({ quiet: true })}
           onOpenCalendarRules={() => setOverlay({ kind: "calendar-rules" })}
+          presence={zones?.presence}
         />
       ) : null}
 

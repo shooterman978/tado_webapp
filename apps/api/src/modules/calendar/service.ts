@@ -13,6 +13,7 @@ import type {
   CalendarStatusResponse,
 } from "@heizplan/shared";
 import { config } from "../../config.js";
+import { getCachedHomePresence } from "../cloud/presence-service.js";
 import { getCloudQuota } from "../cloud/quota.js";
 import {
   CalDavError,
@@ -164,14 +165,16 @@ export async function removeRule(id: string): Promise<boolean> {
 }
 
 export async function getCalendarStatus(): Promise<CalendarStatusResponse> {
-  const [connection, rules, active, quota, selectedUids] = await Promise.all([
-    getConnectionStatus(),
-    listRules(),
-    loadActiveOverrides(dataDir()),
-    getCloudQuota(),
-    loadSelectedEventUids(dataDir()),
-  ]);
-  return { connection, rules, active, quota, selectedUids };
+  const [connection, rules, active, quota, selectedUids, presence] =
+    await Promise.all([
+      getConnectionStatus(),
+      listRules(),
+      loadActiveOverrides(dataDir()),
+      getCloudQuota(),
+      loadSelectedEventUids(dataDir()),
+      getCachedHomePresence(),
+    ]);
+  return { connection, rules, active, quota, selectedUids, presence };
 }
 
 async function requireCreds(): Promise<CalendarCredentials> {

@@ -14,6 +14,7 @@ import {
   filterEventsBySelection,
   isEventActiveAt,
   isEventInTimingWindow,
+  ruleMatchesPresence,
   selectActiveMatches,
   timingWindowBounds,
 } from "./match.js";
@@ -37,6 +38,7 @@ function rule(
     readyMinutesBefore: partial.readyMinutesBefore ?? 60,
     readyMinutesAfter: partial.readyMinutesAfter ?? 60,
     applyPath: partial.applyPath ?? "hap_overlay",
+    presenceCondition: partial.presenceCondition ?? "always",
     priority: partial.priority ?? 100,
     createdAt: "2026-01-01T00:00:00.000Z",
     updatedAt: "2026-01-01T00:00:00.000Z",
@@ -171,6 +173,33 @@ function main(): void {
   );
   assert.equal(splitMid.has("heat-2"), false);
   assert.equal(splitMid.has("off-2"), true);
+
+  // Geofencing: rule gated on home/away
+  assert.equal(ruleMatchesPresence("always", "unknown"), true);
+  assert.equal(ruleMatchesPresence("home", "unknown"), false);
+  assert.equal(ruleMatchesPresence("home", "home"), true);
+  assert.equal(ruleMatchesPresence("away", "home"), false);
+  assert.equal(ruleMatchesPresence("away", "away"), true);
+
+  const homeOnly = selectActiveMatches(
+    [event({})],
+    [rule({ presenceCondition: "home", roomIds: ["r-home"] })],
+    mid,
+    [],
+    new Map(),
+    "away",
+  );
+  assert.equal(homeOnly.size, 0);
+
+  const homeOk = selectActiveMatches(
+    [event({})],
+    [rule({ presenceCondition: "home", roomIds: ["r-home"] })],
+    mid,
+    [],
+    new Map(),
+    "home",
+  );
+  assert.equal(homeOk.has("r-home"), true);
 
   assert.equal(
     filterEventsBySelection([event({ uid: "a" }), event({ uid: "b" })], ["b"])

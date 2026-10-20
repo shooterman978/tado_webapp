@@ -15,6 +15,7 @@ const ROOM_MAP_FILE = "room-map.json";
 const PENDING_AUTH_FILE = "cloud-auth-pending.json";
 const SCHEDULE_CACHE_FILE = "schedule-cache.json";
 const SYNC_STATE_FILE = "cloud-sync-state.json";
+const PRESENCE_CACHE_FILE = "presence-cache.json";
 
 export interface CloudTokens {
   accessToken: string;
@@ -64,6 +65,14 @@ export interface CloudSyncState {
   lastSyncedAt: string | null;
   openWindowByZoneId: Record<number, boolean>;
   openWindowSyncedAt: string | null;
+}
+
+/** Disk cache for GET /homes/{id}/state (Home/Away). */
+export interface PresenceCacheFile {
+  mode: "home" | "away";
+  presenceLocked: boolean | null;
+  fetchedAt: string;
+  homeId: number | null;
 }
 
 async function ensureDir(dataDir: string): Promise<void> {
@@ -203,4 +212,30 @@ export async function saveCloudSyncState(
 ): Promise<void> {
   await ensureDir(dataDir);
   await writeJson(path.join(dataDir, SYNC_STATE_FILE), state);
+}
+
+export async function loadPresenceCache(
+  dataDir: string,
+): Promise<PresenceCacheFile | null> {
+  const file = await readJson<Partial<PresenceCacheFile>>(
+    path.join(dataDir, PRESENCE_CACHE_FILE),
+  );
+  if (!file?.fetchedAt || (file.mode !== "home" && file.mode !== "away")) {
+    return null;
+  }
+  return {
+    mode: file.mode,
+    presenceLocked:
+      typeof file.presenceLocked === "boolean" ? file.presenceLocked : null,
+    fetchedAt: file.fetchedAt,
+    homeId: typeof file.homeId === "number" ? file.homeId : null,
+  };
+}
+
+export async function savePresenceCache(
+  dataDir: string,
+  cache: PresenceCacheFile,
+): Promise<void> {
+  await ensureDir(dataDir);
+  await writeJson(path.join(dataDir, PRESENCE_CACHE_FILE), cache);
 }

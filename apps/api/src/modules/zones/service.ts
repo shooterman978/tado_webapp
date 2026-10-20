@@ -11,6 +11,7 @@ import {
   clearActiveOverrideForRoom,
   loadActiveOverrides,
 } from "../calendar/store.js";
+import { getCachedHomePresence } from "../cloud/presence-service.js";
 import { getCachedZoneMetadata, getCloudStatus } from "../cloud/service.js";
 import { loadRoomMap, loadScheduleCache } from "../cloud/store.js";
 import {
@@ -263,11 +264,15 @@ function buildMockZones(): Zone[] {
   });
 }
 
-const PRESENCE_UNKNOWN: ZonesResponse["presence"] = {
+const PRESENCE_UNKNOWN: NonNullable<ZonesResponse["presence"]> = {
   mode: "unknown",
   source: "none",
+  presenceLocked: null,
+  fetchedAt: null,
+  stale: true,
+  ttlMinutes: 15,
   message:
-    "Home/Away lokal simulierbar in der PWA; Auto/Geofence ist Cloud/Abo.",
+    "Home/Away kommt von der Tado-Cloud (Geofencing) — nicht von der lokalen Bridge.",
 };
 
 async function finishZones(
@@ -305,10 +310,11 @@ export async function listZones(): Promise<ZonesResponse> {
 
   if (status.paired) {
     const devices = await bridge.listZones();
-    const [meta, roomMap, cloud] = await Promise.all([
+    const [meta, roomMap, cloud, presence] = await Promise.all([
       getCachedZoneMetadata(),
       loadRoomMap(config.bridgeDataDir),
       getCloudStatus(),
+      getCachedHomePresence(),
     ]);
     const { zones, naming } = aggregateRooms(devices, meta, roomMap);
     return finishZones(
@@ -319,7 +325,7 @@ export async function listZones(): Promise<ZonesResponse> {
         cloudLinked: cloud.linked,
         syncedAt: naming.syncedAt ?? cloud.syncedAt,
       },
-      PRESENCE_UNKNOWN,
+      presence,
     );
   }
 
@@ -336,7 +342,11 @@ export async function listZones(): Promise<ZonesResponse> {
       {
         mode: "home",
         source: "manual",
-        message: "Fixture: Home (lokal simuliert).",
+        presenceLocked: null,
+        fetchedAt: new Date().toISOString(),
+        stale: false,
+        ttlMinutes: 15,
+        message: "Fixture: Zuhause (lokal simuliert).",
       },
     );
   }

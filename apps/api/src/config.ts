@@ -109,4 +109,9 @@ export const config = {
    */
   /** Background calendar evaluate interval (ms). 0 = disabled. */
   calendarPollMs: Number(env("CALENDAR_POLL_MS", "60000")),
+  /**
+   * Sparse Home/Away (presence) cloud poll interval in minutes.
+   * Cache is reused until TTL; zones list never forces a fetch.
+   */
+  cloudPresencePollMinutes: envNumber("CLOUD_PRESENCE_POLL_MINUTES", 15),
 } as const;

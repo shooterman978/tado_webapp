@@ -7,13 +7,16 @@ import { useEffect, useState, type ReactNode } from "react";
 import type {
   CloudQuotaStatus,
   HealthStatus,
+  HomePresenceStatus,
   OpenWindowResumeMode,
   OpenWindowSettings,
   ZonesResponse,
 } from "@heizplan/shared";
 import {
+  ApiError,
   fetchCloudQuota,
   fetchOpenWindowSettings,
+  refreshHomePresence,
   saveCloudQuotaLimit,
   saveOpenWindowSettings,
 } from "../api";
@@ -43,6 +46,7 @@ interface SettingsScreenProps {
   quotaUnavailable?: string | null;
   onZonesRefresh?: () => void;
   onOpenCalendarRules?: () => void;
+  presence?: HomePresenceStatus | null;
 }
 
 interface RowProps {
@@ -82,6 +86,7 @@ export function SettingsScreen({
   quotaUnavailable = null,
   onZonesRefresh,
   onOpenCalendarRules,
+  presence = null,
 }: SettingsScreenProps) {
   const [ow, setOw] = useState<OpenWindowSettings | null>(null);
   const [owError, setOwError] = useState<string | null>(null);
@@ -89,6 +94,14 @@ export function SettingsScreen({
   const [limitDraft, setLimitDraft] = useState("");
   const [quotaError, setQuotaError] = useState<string | null>(null);
   const [quotaBusy, setQuotaBusy] = useState(false);
+  const [presenceBusy, setPresenceBusy] = useState(false);
+  const [presenceLocal, setPresenceLocal] = useState<HomePresenceStatus | null>(
+    presence,
+  );
+
+  useEffect(() => {
+    setPresenceLocal(presence);
+  }, [presence]);
 
   useEffect(() => {
     void fetchOpenWindowSettings()
@@ -144,11 +157,38 @@ export function SettingsScreen({
     void patchOw({ resumeMode });
   }
 
+  async function refreshPresence(): Promise<void> {
+    setPresenceBusy(true);
+    setQuotaError(null);
+    try {
+      const res = await refreshHomePresence(true);
+      setPresenceLocal(res.presence);
+      onQuotaChange(res.quota);
+      onZonesRefresh?.();
+    } catch (err) {
+      if (err instanceof ApiError && err.quota) {
+        onQuotaChange(err.quota);
+      }
+      setQuotaError(
+        err instanceof Error ? err.message : "Home/Away aktualisieren fehlgeschlagen",
+      );
+    } finally {
+      setPresenceBusy(false);
+    }
+  }
+
+  const presenceMeta =
+    !presenceLocal || presenceLocal.mode === "unknown"
+      ? "—"
+      : presenceLocal.mode === "home"
+        ? "Zuhause"
+        : "Unterwegs";
+
   return (
     <div className="settings">
       <h1 className="settings__title">Einstellungen</h1>
 
-      <p className="settings__section-label">Termine &amp; Heizung</p>
+      <p className="settings__section-label">Automatisierung</p>
       <div className="settings-group settings-group--feature">
         <button
           type="button"
@@ -162,10 +202,31 @@ export function SettingsScreen({
           <span className="settings-row__label">
             Termine steuern die Heizung
             <small className="settings-row__sub">
-              Assistent · iPhone-Kalender · Schritt für Schritt
+              Assistent · inkl. Nur zu Hause / nur weg
             </small>
           </span>
           <span className="settings-row__meta">Öffnen</span>
+          <ChevronIcon className="settings-row__chev" />
+        </button>
+        <button
+          type="button"
+          className="settings-row settings-row--button"
+          onClick={() => void refreshPresence()}
+          disabled={presenceBusy}
+          aria-label="Geofencing Home Away Status aktualisieren"
+        >
+          <span className="settings-row__circle" style={{ background: "#2f6fed" }} aria-hidden="true">
+            G
+          </span>
+          <span className="settings-row__label">
+            Geofencing Home/Away
+            <small className="settings-row__sub">
+              {presenceBusy
+                ? "Aktualisiere…"
+                : presenceLocal?.message ?? "Status von der Tado-Cloud"}
+            </small>
+          </span>
+          <span className="settings-row__meta">{presenceMeta}</span>
           <ChevronIcon className="settings-row__chev" />
         </button>
       </div>
@@ -391,11 +452,8 @@ export function SettingsScreen({
         <CloudRequestLog />
       </div>
 
-      <p className="settings__section-label">Skills</p>
+      <p className="settings__section-label">Weitere Skills</p>
       <div className="settings-group">
-        <Row label="Auto-Assist" glyph="A" circle="#1b5e54" muted />
-        <Row label="Geofencing" glyph="G" circle="#2f6fed" muted />
-        <Row label="Energy IQ" glyph="E" circle="#7cb342" muted />
         <Row
           label="Fenster offen"
           glyph="F"
@@ -408,20 +466,9 @@ export function SettingsScreen({
           label="Intelligenter Zeitplan"
           glyph="Z"
           circle="#e67e22"
-          trailing={<span className="settings-row__meta">Cloud-Sync</span>}
+          trailing={<span className="settings-row__meta">in Tado-App</span>}
         />
-        <button
-          type="button"
-          className="settings-row settings-row--button"
-          onClick={onOpenCalendarRules}
-        >
-          <span className="settings-row__circle" style={{ background: "#c0392b" }} aria-hidden="true">
-            K
-          </span>
-          <span className="settings-row__label">Termine &amp; Heizung</span>
-          <span className="settings-row__meta">Assistent</span>
-          <ChevronIcon className="settings-row__chev" />
-        </button>
+        <Row label="Energy IQ" glyph="E" circle="#7cb342" muted />
         <Row label="Raumluft-Komfort" glyph="L" circle="#1abc9c" muted />
       </div>
 

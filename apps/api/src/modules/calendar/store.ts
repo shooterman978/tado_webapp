@@ -13,6 +13,7 @@ import type {
   CalendarApplyPath,
   CalendarInfo,
   CalendarMatchKind,
+  CalendarPresenceCondition,
   CalendarRule,
   CalendarRuleMode,
   CalendarRuleTiming,
@@ -201,6 +202,15 @@ function normaliseReadyMinutes(
   return fallback;
 }
 
+function normalisePresenceCondition(
+  value: unknown,
+): CalendarPresenceCondition {
+  if (value === "home" || value === "away") {
+    return value;
+  }
+  return "always";
+}
+
 export function normaliseRule(
   input: Partial<CalendarRule> & {
     match?: { kind?: string; value?: string; eventUids?: string[] };
@@ -327,6 +337,11 @@ export function normaliseRule(
       60,
     ),
     applyPath: normaliseApplyPath(input.applyPath ?? existing?.applyPath),
+    presenceCondition: normalisePresenceCondition(
+      input.presenceCondition !== undefined
+        ? input.presenceCondition
+        : existing?.presenceCondition,
+    ),
     priority:
       typeof input.priority === "number" && Number.isFinite(input.priority)
         ? Math.trunc(input.priority)

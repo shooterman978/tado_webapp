@@ -201,16 +201,34 @@ export interface ZoneNamingInfo {
   unresolvedDeviceCount: number;
 }
 
+/**
+ * Tado Cloud Home/Away (geofencing / presenceLock).
+ * Not available via local HAP on V3 bridge — cloud cache only.
+ */
+export type HomePresenceMode = "unknown" | "home" | "away";
+
+export type HomePresenceSource = "none" | "cloud" | "manual" | "cache";
+
+export interface HomePresenceStatus {
+  mode: HomePresenceMode;
+  source: HomePresenceSource;
+  /** From Tado `/homes/{id}/state` — manual lock vs geo Auto-Assist. */
+  presenceLocked: boolean | null;
+  /** ISO of last successful cloud fetch (or null). */
+  fetchedAt: string | null;
+  /** True when cache is older than the configured poll interval. */
+  stale: boolean;
+  /** Configured sparse poll interval (minutes). */
+  ttlMinutes: number;
+  message: string;
+}
+
 export interface ZonesResponse {
   zones: Zone[];
   source: "mock" | "bridge" | "empty";
   naming?: ZoneNamingInfo;
-  /** Home/Away — not available via local HAP on V3 bridge. */
-  presence?: {
-    mode: "unknown" | "home" | "away";
-    source: "none" | "cloud" | "manual";
-    message: string;
-  };
+  /** Home/Away — cloud cache; never fetched on every zones poll. */
+  presence?: HomePresenceStatus;
 }
 
 /** Cloud OAuth / metadata link status (names only — not live control). */
@@ -407,6 +425,12 @@ export type CalendarApplyPath = "hap_overlay" | "cloud_write";
 
 export type CalendarRuleMode = "heat" | "off" | "eco";
 
+/**
+ * When a calendar rule may apply relative to Tado Home/Away.
+ * Plain UI: Immer / Nur wenn jemand zu Hause / Nur wenn niemand zu Hause.
+ */
+export type CalendarPresenceCondition = "always" | "home" | "away";
+
 export interface CalendarRuleMatch {
   kind: CalendarMatchKind;
   /**
@@ -469,6 +493,12 @@ export interface CalendarRule {
    * cloud_write only when remaining > 0 and the engine opts in.
    */
   applyPath: CalendarApplyPath;
+  /**
+   * Geofencing gate (default always).
+   * When home/away and current presence does not match (or is unknown),
+   * the rule is not applied.
+   */
+  presenceCondition: CalendarPresenceCondition;
   /** Higher wins when multiple rules match the same room. */
   priority: number;
   createdAt: string;
@@ -573,6 +603,8 @@ export interface CalendarStatusResponse {
   quota: CloudQuotaStatus;
   /** Persisted event UIDs to consider (may be empty). */
   selectedUids: string[];
+  /** Cached Home/Away (disk-only; refresh via /api/cloud/presence). */
+  presence: HomePresenceStatus;
 }
 
 /** @deprecated Prefer HeatupRoomSummary / HeatupPrediction. */

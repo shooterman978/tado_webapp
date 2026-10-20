@@ -15,6 +15,10 @@ import {
   unlinkCloud,
 } from "../modules/cloud/service.js";
 import {
+  getCachedHomePresence,
+  getHomePresence,
+} from "../modules/cloud/presence-service.js";
+import {
   getCloudQuota,
   getCloudQuotaLog,
   setCloudQuotaLimit,
@@ -51,6 +55,35 @@ cloudRoutes.get("/status", async (c) => {
 /** Disk-only home sync bookmark (no cloud HTTP). */
 cloudRoutes.get("/sync", async (c) => {
   return c.json(await getCloudSyncStatus());
+});
+
+/**
+ * Home/Away presence — disk cache only (0 quota).
+ * Force refresh: POST /presence/refresh.
+ */
+cloudRoutes.get("/presence", async (c) => {
+  const presence = await getCachedHomePresence();
+  return c.json({ presence, quota: await getCloudQuota() });
+});
+
+/** Sparse cloud fetch of Home/Away (1 quota when not fresh / always). */
+cloudRoutes.post("/presence/refresh", async (c) => {
+  try {
+    const body = (await c.req.json().catch(() => ({}))) as { force?: boolean };
+    const result = await getHomePresence({ force: body.force !== false });
+    return c.json({
+      presence: result.presence,
+      quota: result.quota,
+      fetched: result.fetched,
+    });
+  } catch (err) {
+    if (isQuotaError(err)) {
+      const q = quotaHttp(err);
+      return c.json(q.body, q.status);
+    }
+    const message = err instanceof Error ? err.message : "Presence refresh failed";
+    return c.json({ error: "presence_refresh_failed", message }, 502);
+  }
 });
 
 /** Shared daily budget for all cloud HTTP (not schedule-specific). */

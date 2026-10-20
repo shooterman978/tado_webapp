@@ -12,6 +12,7 @@ import type {
   CloudStatus,
   CloudSyncStatus,
   HealthStatus,
+  HomePresenceStatus,
   HeatupPrediction,
   HeatupRoomSummary,
   OpenWindowSettings,
@@ -266,6 +267,23 @@ export function saveZoneSchedule(
 
 export function fetchCalendarStatus(): Promise<CalendarStatusResponse> {
   return getJson<CalendarStatusResponse>("/api/calendar/status");
+}
+
+export function fetchHomePresence(): Promise<{
+  presence: HomePresenceStatus;
+  quota: CloudQuotaStatus;
+}> {
+  return getJson("/api/cloud/presence");
+}
+
+export function refreshHomePresence(
+  force = true,
+): Promise<{
+  presence: HomePresenceStatus;
+  quota: CloudQuotaStatus;
+  fetched: boolean;
+}> {
+  return postJsonResult("/api/cloud/presence/refresh", { force });
 }
 
 export function fetchCalendarConnection(): Promise<CalendarConnectionStatus> {

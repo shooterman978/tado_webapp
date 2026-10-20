@@ -14,7 +14,7 @@ export function MoreScreen({ onOpenCalendarRules }: MoreScreenProps) {
     <div className="more">
       <h1 className="settings__title">Mehr</h1>
 
-      <p className="settings__section-label">Schnellzugriff</p>
+      <p className="settings__section-label">Automatisierung</p>
       <div className="settings-group settings-group--feature">
         <button
           type="button"
@@ -28,7 +28,7 @@ export function MoreScreen({ onOpenCalendarRules }: MoreScreenProps) {
           <span className="settings-row__label">
             Termine &amp; Heizung
             <small className="settings-row__sub">
-              Assistent: Termin wählen → Räume → Temperatur
+              Assistent · Home/Away · Vorwärmen
             </small>
           </span>
           <span className="settings-row__meta">Öffnen</span>
@@ -39,7 +39,8 @@ export function MoreScreen({ onOpenCalendarRules }: MoreScreenProps) {
       <p className="settings__section-label">Info</p>
       <div className="settings-group">
         <p className="more__body">
-          Heizplan · lokale Steuerung · kein TadoLocal.
+          Heizplan = Automatisierung (Termine, Fenster, Heat-up, Geofencing).
+          Alltagstemperaturen bleiben in der Tado-App.
         </p>
       </div>
     </div>

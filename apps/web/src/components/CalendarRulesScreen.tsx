@@ -8,10 +8,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type {
   CalendarEventPreview,
+  CalendarPresenceCondition,
   CalendarRule,
   CalendarRuleTiming,
   CalendarStatusResponse,
   CloudQuotaStatus,
+  HomePresenceStatus,
   Zone,
 } from "@heizplan/shared";
 import {
@@ -21,6 +23,7 @@ import {
   evaluateCalendarRules,
   fetchCalendarEvents,
   fetchCalendarStatus,
+  refreshHomePresence,
   saveCalendarConnection,
   saveCalendarEventSelection,
 } from "../api";
@@ -42,12 +45,51 @@ type WizardStep =
   | "pattern"
   | "name"
   | "rooms"
+  | "presence"
   | "done"
   | "advanced";
 
 type HowKind = "events" | "pattern";
 
 const TEMP_PRESETS = [18, 19, 20, 21, 22] as const;
+
+const PRESENCE_OPTIONS: Array<{
+  id: CalendarPresenceCondition;
+  label: string;
+  hint: string;
+}> = [
+  {
+    id: "always",
+    label: "Immer",
+    hint: "Unabhängig davon, ob jemand zu Hause ist",
+  },
+  {
+    id: "home",
+    label: "Nur wenn jemand zu Hause ist",
+    hint: "Regel pausiert, solange niemand da ist (Away)",
+  },
+  {
+    id: "away",
+    label: "Nur wenn niemand zu Hause ist",
+    hint: "Regel greift nur im Away-Modus",
+  },
+];
+
+function presenceLabel(c: CalendarPresenceCondition | undefined): string {
+  return (
+    PRESENCE_OPTIONS.find((o) => o.id === (c ?? "always"))?.label ?? "Immer"
+  );
+}
+
+function presenceStatusPlain(p: HomePresenceStatus | undefined): string {
+  if (!p || p.mode === "unknown") {
+    return "Status noch unbekannt";
+  }
+  if (p.mode === "home") {
+    return p.stale ? "Zuletzt: jemand zu Hause" : "Gerade: jemand zu Hause";
+  }
+  return p.stale ? "Zuletzt: niemand zu Hause" : "Gerade: niemand zu Hause";
+}
 
 const HEAT_TIMING_OPTIONS: Array<{
   id: CalendarRuleTiming;
@@ -137,7 +179,8 @@ function rulePlainSummary(rule: CalendarRule, zones: Zone[]): string {
     rule.match.kind === "event_uid"
       ? `${rule.match.eventUids?.length ?? 1} Termin(e)`
       : `Titel enthält „${rule.match.value}“`;
-  return `${when} · ${parts.join(" · ") || "keine Räume"}`;
+  const geo = presenceLabel(rule.presenceCondition);
+  return `${when} · ${parts.join(" · ") || "keine Räume"} · ${geo}`;
 }
 
 function TimingPicker({
@@ -192,6 +235,9 @@ export function CalendarRulesScreen({
   const [offTiming, setOffTiming] = useState<CalendarRuleTiming>("during");
   const [readyBefore, setReadyBefore] = useState(60);
   const [readyAfter, setReadyAfter] = useState(60);
+  const [presenceCondition, setPresenceCondition] =
+    useState<CalendarPresenceCondition>("always");
+  const [presenceBusy, setPresenceBusy] = useState(false);
   const [doneMsg, setDoneMsg] = useState<string | null>(null);
   const [connectUser, setConnectUser] = useState("");
   const [connectPass, setConnectPass] = useState("");
@@ -232,8 +278,30 @@ export function CalendarRulesScreen({
     setOffTiming("during");
     setReadyBefore(60);
     setReadyAfter(60);
+    setPresenceCondition("always");
     setDoneMsg(null);
     setError(null);
+  }
+
+  async function refreshPresenceNow(): Promise<void> {
+    setPresenceBusy(true);
+    setError(null);
+    try {
+      const res = await refreshHomePresence(true);
+      onQuotaRef.current?.(res.quota);
+      await refreshStatus();
+    } catch (err) {
+      if (err instanceof ApiError && err.quota) {
+        onQuotaRef.current?.(err.quota);
+      }
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Home/Away konnte nicht aktualisiert werden",
+      );
+    } finally {
+      setPresenceBusy(false);
+    }
   }
 
   function startNewRule(): void {
@@ -381,6 +449,7 @@ export function CalendarRulesScreen({
         offTiming,
         readyMinutesBefore: readyBefore,
         readyMinutesAfter: readyAfter,
+        presenceCondition,
         applyPath: "hap_overlay",
         priority: 200,
       });
@@ -443,17 +512,6 @@ export function CalendarRulesScreen({
 
   function stepBack(): void {
     setError(null);
-    const order: WizardStep[] = [
-      "overview",
-      "connect",
-      "how",
-      "events",
-      "pattern",
-      "name",
-      "rooms",
-      "done",
-      "advanced",
-    ];
     if (step === "overview" || step === "advanced") {
       if (step === "advanced") {
         setStep("overview");
@@ -482,12 +540,14 @@ export function CalendarRulesScreen({
       setStep("name");
       return;
     }
+    if (step === "presence") {
+      setStep("rooms");
+      return;
+    }
     if (step === "done") {
       setStep("overview");
       return;
     }
-    const i = order.indexOf(step);
-    setStep(order[Math.max(0, i - 1)]);
   }
 
   const stepPill =
@@ -499,9 +559,11 @@ export function CalendarRulesScreen({
           ? "3"
           : step === "rooms"
             ? "4"
-            : step === "done"
-              ? "✓"
-              : "";
+            : step === "presence"
+              ? "5"
+              : step === "done"
+                ? "✓"
+                : "";
 
   const headerTitle =
     step === "overview"
@@ -518,9 +580,13 @@ export function CalendarRulesScreen({
                 ? "Name der Regel"
                 : step === "rooms"
                   ? "Räume & Zeitpunkt"
-                  : step === "done"
-                    ? "Fertig"
-                    : "Erweitert";
+                  : step === "presence"
+                    ? "Zuhause oder weg?"
+                    : step === "done"
+                      ? "Fertig"
+                      : "Erweitert";
+
+  const presence = status?.presence;
 
   return (
     <div className="cal-wiz">
@@ -549,8 +615,25 @@ export function CalendarRulesScreen({
         <div className="cal-wiz__body">
           <p className="cal-wiz__lead">
             Termine aus dem iPhone steuern die Heizung — auch wenn der Termin erst
-            später kommt.
+            später kommt. Optional nur zu Hause oder nur unterwegs.
           </p>
+          <p className="cal-wiz__status" role="status">
+            <strong>Status:</strong> {presenceStatusPlain(presence)}
+            {presence?.fetchedAt
+              ? ` · Stand ${new Date(presence.fetchedAt).toLocaleTimeString("de-DE", {
+                  hour: "2-digit",
+                  minute: "2-digit",
+                })}`
+              : ""}
+          </p>
+          <button
+            type="button"
+            className="cal-wiz__ghost"
+            disabled={presenceBusy || actionBusy}
+            onClick={() => void refreshPresenceNow()}
+          >
+            {presenceBusy ? "Aktualisiere…" : "Home/Away aktualisieren"}
+          </button>
           <button
             type="button"
             className="cal-wiz__primary"
@@ -998,15 +1081,67 @@ export function CalendarRulesScreen({
             <button
               type="button"
               className="cal-wiz__primary"
-              disabled={
-                actionBusy || (heatIds.length === 0 && offIds.length === 0)
-              }
+              disabled={heatIds.length === 0 && offIds.length === 0}
               onClick={() => {
                 if (!ruleName.trim()) {
                   setRuleName(suggestName());
                 }
-                void finishRule();
+                setStep("presence");
               }}
+            >
+              Weiter
+            </button>
+          </div>
+        </div>
+      ) : null}
+
+      {step === "presence" ? (
+        <div className="cal-wiz__body">
+          <p className="cal-wiz__lead">
+            Soll die Regel immer greifen — oder nur, wenn jemand zu Hause ist
+            bzw. niemand da ist?
+          </p>
+          <p className="cal-wiz__status" role="status">
+            {presenceStatusPlain(presence)}
+          </p>
+          <div className="cal-wiz__timing">
+            {PRESENCE_OPTIONS.map((opt) => (
+              <button
+                key={opt.id}
+                type="button"
+                className={
+                  presenceCondition === opt.id
+                    ? "cal-wiz__choice is-on"
+                    : "cal-wiz__choice"
+                }
+                onClick={() => setPresenceCondition(opt.id)}
+              >
+                <strong>{opt.label}</strong>
+                <span className="cal-wiz__meta">{opt.hint}</span>
+              </button>
+            ))}
+          </div>
+          <p className="cal-wiz__hint">
+            Passt die Bedingung nicht (oder ist der Status unbekannt), wird die
+            Regel nicht ausgeführt. Alltagssteuerung bleibt in der Tado-App.
+          </p>
+          <button
+            type="button"
+            className="cal-wiz__ghost"
+            disabled={presenceBusy || actionBusy}
+            onClick={() => void refreshPresenceNow()}
+          >
+            {presenceBusy ? "Aktualisiere…" : "Status jetzt aktualisieren"}
+          </button>
+          <div className="cal-wiz__nav">
+            <button type="button" className="cal-wiz__ghost" onClick={stepBack}>
+              Zurück
+            </button>
+            <button
+              type="button"
+              className="cal-wiz__primary"
+              disabled={actionBusy}
+              onClick={() => void finishRule()}
             >
               {actionBusy ? "Speichere…" : "Fertig"}
             </button>
@@ -1030,6 +1165,7 @@ export function CalendarRulesScreen({
             {offIds.length > 0
               ? ` · Aus: ${timingLabel(offTiming, "off")}`
               : ""}
+            {` · ${presenceLabel(presenceCondition)}`}
           </p>
           <button
             type="button"

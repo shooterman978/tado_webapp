@@ -11,6 +11,7 @@ import type {
   CalendarRule,
 } from "@heizplan/shared";
 import { config } from "../../config.js";
+import { getHomePresence } from "../cloud/presence-service.js";
 import { getCloudQuota } from "../cloud/quota.js";
 import {
   clearZoneOverlay,
@@ -103,7 +104,16 @@ export async function reconcileOverrides(
   at = new Date(),
 ): Promise<CalendarEvaluateResult> {
   const preheatByRoom = await collectPreheatEstimates(rules);
-  const desired = selectActiveMatches(events, rules, at, [], preheatByRoom);
+  // Sparse presence refresh (0 quota when cache fresh within TTL).
+  const { presence } = await getHomePresence();
+  const desired = selectActiveMatches(
+    events,
+    rules,
+    at,
+    [],
+    preheatByRoom,
+    presence.mode,
+  );
   const previous = await loadActiveOverrides(dataDir());
   const dismissals = await loadCalendarDismissals(dataDir());
   const quota = await getCloudQuota();

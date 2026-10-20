@@ -140,6 +140,9 @@ function labelForCloudCall(method: string, pathname: string): string {
   if (pathname.includes("/zoneStates")) {
     return "openWindow.zoneStates";
   }
+  if (/\/homes\/\d+\/state$/.test(pathname)) {
+    return "presence.homeState";
+  }
   if (pathname.includes("/activeTimetable")) {
     return m === "PUT" ? "schedule.activeTimetable.put" : "schedule.activeTimetable";
   }
@@ -409,6 +412,24 @@ interface CloudZoneState {
 
 interface CloudZoneStatesResponse {
   zoneStates?: Record<string, CloudZoneState>;
+}
+
+/** Raw Tado home presence from GET /homes/{id}/state. */
+export interface TadoHomeState {
+  presence: "HOME" | "AWAY";
+  presenceLocked?: boolean;
+  showHomePresenceSwitchButton?: boolean;
+}
+
+/**
+ * Sparse Home/Away read — one quota unit via cloudFetch.
+ * Does not mutate presenceLock (read-only).
+ */
+export async function fetchHomeState(
+  accessToken: string,
+  homeId: number,
+): Promise<TadoHomeState> {
+  return apiGet<TadoHomeState>(accessToken, `/homes/${homeId}/state`);
 }
 
 /**

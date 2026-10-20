@@ -65,6 +65,159 @@ input {
   min-height: 100dvh;
 }
 
+/* —— Automation home (Tado dark cards) —— */
+
+.auto-home {
+  margin: 0 0 1rem;
+}
+
+.auto-home__label {
+  margin: 0 0 0.45rem;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-muted);
+}
+
+.auto-home__grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.55rem;
+}
+
+.auto-card {
+  appearance: none;
+  border: none;
+  border-radius: var(--radius);
+  padding: 0.85rem 0.9rem 0.95rem;
+  min-height: 6.4rem;
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  background: var(--surface);
+  color: var(--ink);
+  cursor: pointer;
+  transition: transform 0.18s var(--ease), background 0.18s var(--ease);
+}
+
+.auto-card:active:not(:disabled) {
+  transform: scale(0.98);
+}
+
+.auto-card:disabled {
+  opacity: 0.65;
+}
+
+.auto-card__kicker {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--ink-muted);
+}
+
+.auto-card__value {
+  font-family: var(--font-brand);
+  font-size: 1.35rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+}
+
+.auto-card__sub {
+  margin-top: auto;
+  font-size: 0.78rem;
+  color: var(--ink-dim);
+  line-height: 1.25;
+}
+
+.auto-card--presence {
+  background: linear-gradient(160deg, #1a3d36 0%, #122822 100%);
+}
+
+.auto-card--calendar {
+  background: linear-gradient(160deg, #3a2418 0%, #2a1a12 100%);
+}
+
+.auto-card--calendar .auto-card__value {
+  color: var(--accent-orange);
+}
+
+.auto-card--window.is-alert {
+  background: linear-gradient(160deg, #3d2a12 0%, #2a1e0e 100%);
+}
+
+.auto-card--window.is-alert .auto-card__value {
+  color: var(--accent-orange);
+}
+
+.auto-card--heatup {
+  background: linear-gradient(160deg, #16352f 0%, #0f2420 100%);
+}
+
+.auto-card--heatup .auto-card__value {
+  color: var(--accent-teal);
+}
+
+.auto-home__note {
+  margin: 0.65rem 0 0;
+  font-size: 0.78rem;
+  color: var(--ink-dim);
+  line-height: 1.35;
+}
+
+.home-rooms {
+  margin: 0.85rem 0 1rem;
+  border-radius: var(--radius);
+  background: var(--surface);
+  border: 1px solid var(--line);
+}
+
+.home-rooms__summary {
+  list-style: none;
+  cursor: pointer;
+  padding: 0.85rem 1rem;
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--ink-muted);
+}
+
+.home-rooms__summary::-webkit-details-marker {
+  display: none;
+}
+
+.home-rooms[open] .home-rooms__summary {
+  border-bottom: 1px solid var(--line);
+  color: var(--ink);
+}
+
+.home-rooms .room-grid {
+  margin: 0.55rem;
+  padding-bottom: 0.55rem;
+}
+
+.home-rooms .room-tile {
+  aspect-ratio: 1 / 0.72;
+}
+
+.home-rooms .temp-display--tile .temp-display__whole {
+  font-size: clamp(1.7rem, 8vw, 2.1rem);
+}
+
+.cal-wiz__status {
+  margin: 0 0 0.75rem;
+  padding: 0.75rem 0.9rem;
+  border-radius: 0.85rem;
+  background: var(--surface-2);
+  font-size: 0.9rem;
+  color: var(--ink);
+}
+
+.cal-wiz__status strong {
+  color: var(--accent-teal);
+  font-weight: 600;
+}
+
 /* —— Promo + Home header (05) —— */
 
 .promo-banner {

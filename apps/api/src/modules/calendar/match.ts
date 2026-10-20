@@ -13,7 +13,12 @@
  * @package @heizplan/api
  */
 
-import type { CalendarRule, CalendarRuleTiming } from "@heizplan/shared";
+import type {
+  CalendarPresenceCondition,
+  CalendarRule,
+  CalendarRuleTiming,
+  HomePresenceMode,
+} from "@heizplan/shared";
 import type { CalDavEvent } from "./caldav.js";
 import { defaultPreheatMinutes } from "./heatup.js";
 
@@ -26,6 +31,24 @@ export interface TimingWindowOptions {
   /** Preheat lead for heat mode; ignored for off. */
   preheatMinutes?: number;
   mode?: "heat" | "off";
+}
+
+/**
+ * Geofencing gate for a rule.
+ * Fail-closed: home/away conditions skip when presence is unknown.
+ */
+export function ruleMatchesPresence(
+  condition: CalendarPresenceCondition | undefined,
+  presenceMode: HomePresenceMode,
+): boolean {
+  const gate = condition ?? "always";
+  if (gate === "always") {
+    return true;
+  }
+  if (presenceMode === "unknown") {
+    return false;
+  }
+  return gate === presenceMode;
 }
 
 export function eventMatchesRule(event: CalDavEvent, rule: CalendarRule): boolean {
@@ -170,9 +193,11 @@ export function selectActiveMatches(
   at = new Date(),
   _selectedUids: string[] = [],
   preheatByRoom: Map<string, number> = new Map(),
+  presenceMode: HomePresenceMode = "unknown",
 ): Map<string, RuleRoomAction> {
   const enabled = rules
     .filter((r) => r.enabled)
+    .filter((r) => ruleMatchesPresence(r.presenceCondition, presenceMode))
     .sort((a, b) => b.priority - a.priority);
   const byRoom = new Map<string, RuleRoomAction>();
 
