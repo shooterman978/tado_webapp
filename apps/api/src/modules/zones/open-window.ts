@@ -22,6 +22,8 @@ import {
   touchWindowDetectedAt,
   type ResolvedWindow,
 } from "./open-window-store.js";
+import { logProtocolEvent } from "../protocol/event-log.js";
+import { noteWindowState } from "../protocol/trackers.js";
 import { clearOverlayRecord } from "./overlay-store.js";
 
 function dataDir(): string {
@@ -59,6 +61,7 @@ export async function enrichZonesWithWindowState(
       };
     }
     const resolved = resolveWindow(zone, overrides, cloudOpen, serialToCloudZone);
+    noteWindowState(zone.id, resolved.windowOpen, resolved.windowSource);
     const snapshotActive = false; // filled after auto-off pass
     return {
       ...zone,
@@ -187,6 +190,13 @@ export async function processOpenWindowAutoOff(
           console.info(
             `[open-window] auto-off ${zone.id} (resume=${settings.resumeMode})`,
           );
+          logProtocolEvent({
+            category: "window",
+            type: "window.auto_off",
+            message: "Fenster-Auto-Aus aktiv",
+            roomId: zone.id,
+            detail: { resumeMode: settings.resumeMode },
+          });
         } catch (err) {
           await clearAutoOffSnapshot(dataDir(), zone.id);
           console.warn(
@@ -212,6 +222,13 @@ export async function processOpenWindowAutoOff(
               : false,
         };
         console.info(`[open-window] resumed ${zone.id} (${settings.resumeMode})`);
+        logProtocolEvent({
+          category: "window",
+          type: "window.resume",
+          message: "Heizung nach Fenster wieder an",
+          roomId: zone.id,
+          detail: { resumeMode: settings.resumeMode },
+        });
       } catch (err) {
         console.warn(
           `[open-window] resume failed ${zone.id}:`,

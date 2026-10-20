@@ -28,6 +28,7 @@ import {
   putHomeDayBlocks,
   refreshAccessToken,
 } from "./client.js";
+import { logProtocolEvent } from "../protocol/event-log.js";
 import {
   CloudQuotaExceededError,
   getCloudQuota,
@@ -175,6 +176,13 @@ export async function syncZoneScheduleFromCloud(roomId: string): Promise<{
       zoneName,
     );
     await saveScheduleCacheEntry(dataDir(), roomKey, schedule);
+    logProtocolEvent({
+      category: "schedule",
+      type: "schedule.sync",
+      message: `Zeitplan synchronisiert${zoneName ? `: ${zoneName}` : ""}`,
+      roomId,
+      detail: { roomKey, cloudZoneId, zoneName: zoneName ?? null },
+    });
     return { schedule, quota: await getCloudQuota(), fromCache: false as const };
   });
 }

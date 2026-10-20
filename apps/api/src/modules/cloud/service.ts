@@ -31,6 +31,7 @@ import {
   refreshAccessToken,
   startDeviceAuth,
 } from "./client.js";
+import { logProtocolEvent } from "../protocol/event-log.js";
 import { getCloudQuota, runCloudRequestGroup } from "./quota.js";
 import { listScheduleCacheTimes } from "./schedule-service.js";
 
@@ -206,10 +207,23 @@ export async function runHomeCloudSync(): Promise<{
       openWindowByZoneId,
       openWindowSyncedAt: syncedAt,
     });
+    const openWindowCount = Object.values(openWindowByZoneId).filter(
+      Boolean,
+    ).length;
+    logProtocolEvent({
+      category: "schedule",
+      type: "schedule.home_sync",
+      message: "Home Cloud-Sync abgeschlossen",
+      detail: {
+        openWindowCount,
+        homeName: meta.homeName ?? null,
+        deviceCount: Object.keys(meta.devices ?? {}).length,
+      },
+    });
     return {
       syncedAt,
       meta,
-      openWindowCount: Object.values(openWindowByZoneId).filter(Boolean).length,
+      openWindowCount,
       quota: await getCloudQuota(),
       sync: await getCloudSyncStatus(),
     };

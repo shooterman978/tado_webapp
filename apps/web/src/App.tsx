@@ -17,6 +17,7 @@ import {
   fetchHealth,
   fetchOpenWindowSettings,
   fetchZones,
+  postProtocolClientEvent,
 } from "./api";
 import { AutomationHome } from "./components/AutomationHome";
 import { BridgePanel } from "./components/BridgePanel";
@@ -29,6 +30,7 @@ import { DisplayPanel } from "./components/DisplayPanel";
 import { GeofencingPanel } from "./components/GeofencingPanel";
 import { HomeCloudSync } from "./components/HomeCloudSync";
 import { OpenWindowPanel } from "./components/OpenWindowPanel";
+import { ProtocolPanel } from "./components/ProtocolPanel";
 import { RoomDetail } from "./components/RoomDetail";
 import { RoomGrid } from "./components/RoomGrid";
 import { ScheduleScreen } from "./components/ScheduleScreen";
@@ -40,7 +42,6 @@ const HOME_NAME_KEY = "heizplan.homeName";
 
 /**
  * Navigation model — one dashboard root + breadcrumb drill-ins.
- * Reserved for a later turn (do not implement UI yet): "protocol" / Protokoll logs.
  */
 type AppView =
   | { kind: "dashboard" }
@@ -49,6 +50,7 @@ type AppView =
   | { kind: "bridge" }
   | { kind: "geofencing" }
   | { kind: "display" }
+  | { kind: "protocol" }
   | { kind: "calendar-rules"; zoneId?: string }
   | { kind: "room"; zoneId: string }
   | { kind: "schedule"; zoneId: string };
@@ -124,9 +126,18 @@ export function App() {
       setOffline(false);
       setLastUpdated(new Date());
     } catch (err) {
+      const message = err instanceof Error ? err.message : "Laden fehlgeschlagen";
       setOffline(true);
-      setError(err instanceof Error ? err.message : "Laden fehlgeschlagen");
+      setError(message);
       setQuotaLoading(false);
+      void postProtocolClientEvent({
+        category: "feedback",
+        type: "feedback.error",
+        message: "Dashboard-Laden fehlgeschlagen",
+        detail: { message: message.slice(0, 200) },
+      }).catch(() => {
+        /* ignore */
+      });
     } finally {
       setRefreshing(false);
     }
@@ -356,6 +367,7 @@ export function App() {
           onLinked={() => void load({ quiet: true })}
           onBack={goDashboard}
           onHome={goDashboard}
+          onOpenProtocol={() => setView({ kind: "protocol" })}
         />
       </div>
     );
@@ -400,6 +412,18 @@ export function App() {
           onShowHumidityChange={setShowHumidity}
           onBack={goDashboard}
           onHome={goDashboard}
+        />
+      </div>
+    );
+  }
+
+  if (view.kind === "protocol") {
+    return (
+      <div className="app-shell app-shell--drill">
+        <ProtocolPanel
+          onBack={goDashboard}
+          onHome={goDashboard}
+          onOpenCloud={() => setView({ kind: "cloud" })}
         />
       </div>
     );
@@ -528,14 +552,20 @@ export function App() {
             </span>
             <ChevronIcon className="settings-row__chev" />
           </button>
-          {/*
-            Reserved System row — Parent turn after Unify:
-            Protokoll (kind: "protocol") with PageChrome `Heizplan › Protokoll`.
-            Events: polling, UI interactions, feedback + agent-analysis
-            (calendar apply/clear, presence changes, quota near-limit/block,
-            window open/auto-off/resume, heat-up accept/reject, schedule sync,
-            bridge disconnect). Do not implement in this branch.
-          */}
+          <button
+            type="button"
+            className="settings-row settings-row--button"
+            onClick={() => setView({ kind: "protocol" })}
+          >
+            <span className="settings-row__circle" style={{ background: "#5856d6" }} aria-hidden="true">
+              P
+            </span>
+            <span className="settings-row__label">
+              Protokoll
+              <small className="settings-row__sub">Automationen &amp; Ereignisse</small>
+            </span>
+            <ChevronIcon className="settings-row__chev" />
+          </button>
         </div>
       </section>
 
@@ -580,5 +610,5 @@ export function App() {
   );
 }
 
-/** Exported for upcoming Protokoll turn — keep kind name stable. */
-export type ReservedProtocolView = { kind: "protocol" };
+/** Stable view kind for Protokoll drill-in. */
+export type ProtocolView = { kind: "protocol" };

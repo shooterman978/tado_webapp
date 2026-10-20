@@ -25,6 +25,7 @@ ENV COREPACK_HOME=/home/heizplan/.cache/node/corepack
 
 RUN useradd --system --create-home --uid 10001 --home-dir /home/heizplan heizplan \
  && mkdir -p /data/bridge "$COREPACK_HOME" \
+ && (cp -a /root/.cache/node/corepack/. "$COREPACK_HOME/" 2>/dev/null || true) \
  && chown -R heizplan:heizplan /data /app /home/heizplan
 
 USER heizplan
@@ -33,4 +34,5 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
   CMD node -e "fetch('http://127.0.0.1:3080/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
 
 WORKDIR /app/apps/api
-CMD ["pnpm", "exec", "tsx", "src/index.ts"]
+# Use package-local tsx — avoids corepack re-download at runtime (offline / DNS).
+CMD ["/app/apps/api/node_modules/.bin/tsx", "src/index.ts"]

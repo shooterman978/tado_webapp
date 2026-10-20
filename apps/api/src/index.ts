@@ -14,6 +14,7 @@ import {
 } from "./modules/calendar/service.js";
 import { maybeSeedOnBoot } from "./modules/heatup/service.js";
 import { tryOutdoorTemperature } from "./modules/heatup/outdoor.js";
+import { logProtocolEvent } from "./modules/protocol/event-log.js";
 
 const app = createApp();
 
@@ -73,14 +74,28 @@ if (config.calendarPollMs > 0) {
       }
       const result = await evaluateCalendar();
       if (result.applied > 0 || result.cleared > 0) {
+        logProtocolEvent({
+          category: "polling",
+          type: "polling.calendar",
+          message: "Kalender geprüft (Änderungen)",
+          detail: {
+            matched: result.matched,
+            applied: result.applied,
+            cleared: result.cleared,
+          },
+        });
         console.log("[calendar]", result.message);
       }
     } catch (err) {
       // Do not log credentials; CalDavError messages are path/status only.
-      console.error(
-        "[calendar] poll failed:",
-        err instanceof Error ? err.message : err,
-      );
+      const message = err instanceof Error ? err.message : String(err);
+      console.error("[calendar] poll failed:", message);
+      logProtocolEvent({
+        category: "feedback",
+        type: "feedback.error",
+        message: "Kalender-Poll fehlgeschlagen",
+        detail: { message: message.slice(0, 200) },
+      });
     }
   };
   setInterval(() => {

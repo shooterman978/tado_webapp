@@ -36,6 +36,12 @@ import {
   attachHeatupHints,
   observeAllZonesHeatup,
 } from "../heatup/observe-all.js";
+import { logProtocolEvent } from "../protocol/event-log.js";
+import {
+  noteBridgeError,
+  noteBridgeStatus,
+  shouldLogZonesPoll,
+} from "../protocol/trackers.js";
 
 export { enrichZonesWithOverlayControl } from "./overlay-control.js";
 
@@ -307,26 +313,50 @@ async function finishZones(
 export async function listZones(): Promise<ZonesResponse> {
   const bridge = getBridgeClient();
   const status = await bridge.getStatus();
+  noteBridgeStatus(status.paired, status.message);
+  if (status.state === "error") {
+    noteBridgeError(status.message);
+  }
+
+  if (shouldLogZonesPoll()) {
+    logProtocolEvent({
+      category: "polling",
+      type: "polling.zones",
+      message: "Räume aktualisiert",
+      detail: {
+        paired: status.paired,
+        state: status.state,
+        source: status.paired ? "bridge" : config.useMockZones ? "mock" : "empty",
+      },
+    });
+  }
 
   if (status.paired) {
-    const devices = await bridge.listZones();
-    const [meta, roomMap, cloud, presence] = await Promise.all([
-      getCachedZoneMetadata(),
-      loadRoomMap(config.bridgeDataDir),
-      getCloudStatus(),
-      getCachedHomePresence(),
-    ]);
-    const { zones, naming } = aggregateRooms(devices, meta, roomMap);
-    return finishZones(
-      zones,
-      zones.length > 0 ? "bridge" : "empty",
-      {
-        ...naming,
-        cloudLinked: cloud.linked,
-        syncedAt: naming.syncedAt ?? cloud.syncedAt,
-      },
-      presence,
-    );
+    try {
+      const devices = await bridge.listZones();
+      const [meta, roomMap, cloud, presence] = await Promise.all([
+        getCachedZoneMetadata(),
+        loadRoomMap(config.bridgeDataDir),
+        getCloudStatus(),
+        getCachedHomePresence(),
+      ]);
+      const { zones, naming } = aggregateRooms(devices, meta, roomMap);
+      return finishZones(
+        zones,
+        zones.length > 0 ? "bridge" : "empty",
+        {
+          ...naming,
+          cloudLinked: cloud.linked,
+          syncedAt: naming.syncedAt ?? cloud.syncedAt,
+        },
+        presence,
+      );
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "listZones failed";
+      noteBridgeError(message);
+      noteBridgeStatus(false, message);
+      throw err;
+    }
   }
 
   if (config.useMockZones) {

@@ -699,3 +699,100 @@ export interface HeatupStatus {
   lastOutdoorSource: OutdoorProviderId | null;
   message: string;
 }
+
+/* -------------------------------------------------------------------------- */
+/* Protocol / event log (Heizplan › Protokoll)                                 */
+/* -------------------------------------------------------------------------- */
+
+/** Coarse filter chips in the Protokoll UI. */
+export type ProtocolEventCategory =
+  | "polling"
+  | "user"
+  | "feedback"
+  | "calendar"
+  | "presence"
+  | "quota"
+  | "window"
+  | "heatup"
+  | "schedule"
+  | "bridge"
+  | "system";
+
+/**
+ * Stable event type ids — keep additive; UI maps to German labels.
+ * Never put tokens/secrets in related detail payloads.
+ */
+export type ProtocolEventType =
+  | "polling.zones"
+  | "polling.calendar"
+  | "user.setpoint"
+  | "user.power"
+  | "user.resume_schedule"
+  | "user.quick_action"
+  | "user.settings"
+  | "user.navigate"
+  | "feedback.error"
+  | "feedback.success"
+  | "calendar.override_apply"
+  | "calendar.override_clear"
+  | "presence.home"
+  | "presence.away"
+  | "presence.changed"
+  | "quota.near_limit"
+  | "quota.blocked"
+  | "window.open"
+  | "window.closed"
+  | "window.auto_off"
+  | "window.resume"
+  | "heatup.accept"
+  | "heatup.reject"
+  | "heatup.started"
+  | "schedule.sync"
+  | "schedule.home_sync"
+  | "bridge.disconnect"
+  | "bridge.reconnect"
+  | "bridge.error"
+  | "system.info";
+
+/** One protocol ring-buffer entry (persisted under bridge data). */
+export interface ProtocolEvent {
+  id: string;
+  /** ISO timestamp. */
+  at: string;
+  /** Europe/Berlin day key YYYY-MM-DD. */
+  dayKey: string;
+  category: ProtocolEventCategory;
+  type: ProtocolEventType;
+  /** Short German summary for the list. */
+  message: string;
+  roomId?: string | null;
+  /**
+   * Optional safe detail bag (strings/numbers/bools only).
+   * Never include tokens, PINs, passwords, or full URLs with query secrets.
+   */
+  detail?: Record<string, string | number | boolean | null> | null;
+}
+
+export interface ProtocolEventsQuery {
+  /** Filter by category (omit / "all" = no filter). */
+  category?: ProtocolEventCategory | "all";
+  /** Substring match on message + type (case-insensitive). */
+  q?: string;
+  /** ISO lower bound (inclusive). */
+  since?: string;
+  /** ISO upper bound (inclusive). */
+  until?: string;
+  /** Max entries to return (newest first). */
+  limit?: number;
+  /** When true, only today's Berlin day. */
+  todayOnly?: boolean;
+}
+
+export interface ProtocolEventsResponse {
+  entries: ProtocolEvent[];
+  retained: number;
+  maxRetained: number;
+  dayKey: string;
+  todayOnly: boolean;
+  categories: ProtocolEventCategory[];
+}

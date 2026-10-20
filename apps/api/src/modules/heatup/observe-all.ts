@@ -10,6 +10,7 @@ import { observeZoneHeatup, type ObserveResult } from "./capture.js";
 import { saveRoomModel } from "./model-store.js";
 import { rebuildRoomModel } from "./predict.js";
 import { listSamplesForRoom, loadSamples } from "./sample-store.js";
+import { logProtocolEvent } from "../protocol/event-log.js";
 import { tryOutdoorTemperature } from "./outdoor.js";
 import { getPrediction } from "./service.js";
 
@@ -46,12 +47,38 @@ export async function observeAllZonesHeatup(
         console.info(
           `[heatup] sample ok ${zone.id} (${state.okSampleCount} ok, rate=${state.rateEmaCPerMin?.toFixed(3) ?? "n/a"} °C/min)`,
         );
+        logProtocolEvent({
+          category: "heatup",
+          type: "heatup.accept",
+          message: "Heat-up-Sample übernommen",
+          roomId: zone.id,
+          detail: {
+            sampleId: result.sampleId ?? null,
+            okSampleCount: state.okSampleCount,
+          },
+        });
       } else if (result.action === "rejected") {
         console.info(
           `[heatup] sample rejected ${zone.id}: ${result.reason ?? "?"}`,
         );
+        logProtocolEvent({
+          category: "heatup",
+          type: "heatup.reject",
+          message: `Heat-up-Sample verworfen (${result.reason ?? "?"})`,
+          roomId: zone.id,
+          detail: {
+            sampleId: result.sampleId ?? null,
+            reason: result.reason ?? null,
+          },
+        });
       } else if (result.action === "started") {
         console.info(`[heatup] session started ${zone.id}`);
+        logProtocolEvent({
+          category: "heatup",
+          type: "heatup.started",
+          message: "Heat-up-Messung gestartet",
+          roomId: zone.id,
+        });
       }
     } catch (err) {
       console.warn(

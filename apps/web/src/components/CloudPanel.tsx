@@ -20,6 +20,8 @@ export interface CloudPanelProps {
   onLinked?: () => void;
   onBack: () => void;
   onHome?: () => void;
+  /** Cross-link to Heizplan › Protokoll (agent events; not the request log). */
+  onOpenProtocol?: () => void;
 }
 
 export function CloudPanel({
@@ -31,6 +33,7 @@ export function CloudPanel({
   onLinked,
   onBack,
   onHome,
+  onOpenProtocol,
 }: CloudPanelProps) {
   const [limitDraft, setLimitDraft] = useState("");
   const [quotaError, setQuotaError] = useState<string | null>(null);
@@ -127,6 +130,20 @@ export function CloudPanel({
 
       <p className="settings__section-label">Cloud-Requests</p>
       <div className="settings-group settings-group--quota">
+        <p className="settings__hint settings__hint--inline">
+          Jeder gezählte Cloud-HTTP-Call (+1 Quota). Automationen und Bedienung
+          stehen im Protokoll — hier nur die Request-Zählung.
+        </p>
+        {onOpenProtocol ? (
+          <button
+            type="button"
+            className="protocol-panel__cloud-link"
+            onClick={onOpenProtocol}
+          >
+            Automations-Protokoll öffnen
+            <span aria-hidden="true">→</span>
+          </button>
+        ) : null}
         <CloudRequestLog />
       </div>
     </div>

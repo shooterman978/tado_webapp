@@ -15,6 +15,7 @@ import type {
   CloudQuotaStatus,
 } from "@heizplan/shared";
 import { config } from "../../config.js";
+import { noteQuotaStatus } from "../protocol/trackers.js";
 
 const QUOTA_FILE = "cloud-quota.json";
 const LOG_FILE = "cloud-quota-log.json";
@@ -231,7 +232,9 @@ export async function consumeCloudQuota(
   const n = Math.max(1, Math.floor(count));
   const file = await loadOrReset();
   if (file.used + n > file.limit) {
-    throw new CloudQuotaExceededError(toStatus(file));
+    const blocked = toStatus(file);
+    noteQuotaStatus({ ...blocked, blocked: true, remaining: 0, nearLimit: true });
+    throw new CloudQuotaExceededError(blocked);
   }
   file.used += n;
   file.updatedAt = new Date().toISOString();
@@ -258,7 +261,9 @@ export async function consumeCloudQuota(
       err instanceof Error ? err.message : err,
     );
   }
-  return toStatus(file);
+  const status = toStatus(file);
+  noteQuotaStatus(status);
+  return status;
 }
 
 /**

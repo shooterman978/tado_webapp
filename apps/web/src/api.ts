@@ -16,6 +16,10 @@ import type {
   HeatupPrediction,
   HeatupRoomSummary,
   OpenWindowSettings,
+  ProtocolEvent,
+  ProtocolEventCategory,
+  ProtocolEventsResponse,
+  ProtocolEventType,
   ZoneSchedule,
   ZoneScheduleUpdate,
   ZonesResponse,
@@ -382,5 +386,52 @@ export function fetchHeatupPrediction(
   return getJson<HeatupPrediction>(
     `/api/heatup/rooms/${encodeURIComponent(roomId)}/prediction?${q}`,
   );
+}
+
+export function fetchProtocolEvents(opts?: {
+  category?: ProtocolEventCategory | "all";
+  q?: string;
+  since?: string;
+  until?: string;
+  todayOnly?: boolean;
+  limit?: number;
+}): Promise<ProtocolEventsResponse> {
+  const params = new URLSearchParams();
+  if (opts?.category && opts.category !== "all") {
+    params.set("category", opts.category);
+  }
+  if (opts?.q) {
+    params.set("q", opts.q);
+  }
+  if (opts?.since) {
+    params.set("since", opts.since);
+  }
+  if (opts?.until) {
+    params.set("until", opts.until);
+  }
+  if (opts?.todayOnly) {
+    params.set("today", "1");
+  }
+  if (opts?.limit != null) {
+    params.set("limit", String(opts.limit));
+  }
+  const qs = params.toString();
+  return getJson<ProtocolEventsResponse>(
+    `/api/protocol/events${qs ? `?${qs}` : ""}`,
+  );
+}
+
+/** Client breadcrumbs / feedback only (server rejects agent categories). */
+export function postProtocolClientEvent(body: {
+  category: "user" | "feedback";
+  type: Extract<
+    ProtocolEventType,
+    "user.navigate" | "user.settings" | "feedback.error" | "feedback.success"
+  >;
+  message: string;
+  roomId?: string | null;
+  detail?: Record<string, string | number | boolean | null> | null;
+}): Promise<{ ok: boolean; entry: ProtocolEvent | null }> {
+  return postJsonResult("/api/protocol/events", body);
 }
 

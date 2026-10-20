@@ -5,6 +5,7 @@
  */
 
 import { Hono } from "hono";
+import { logProtocolEvent } from "../modules/protocol/event-log.js";
 import {
   clearZoneOverlay,
   getOpenWindowSettings,
@@ -40,9 +41,25 @@ zonesRoutes.put("/settings/open-window", async (c) => {
       rooms?: Record<string, { autoOff?: boolean }>;
     }>();
     const settings = await updateOpenWindowSettings(body ?? {});
+    logProtocolEvent({
+      category: "user",
+      type: "user.settings",
+      message: "Fenster-Einstellungen geändert",
+      detail: {
+        detectionEnabled: settings.detectionEnabled ?? null,
+        globalAutoOff: settings.globalAutoOff ?? null,
+        resumeMode: settings.resumeMode ?? null,
+      },
+    });
     return c.json(settings);
   } catch (err) {
     const message = err instanceof Error ? err.message : "Invalid settings";
+    logProtocolEvent({
+      category: "feedback",
+      type: "feedback.error",
+      message: "Fenster-Einstellungen speichern fehlgeschlagen",
+      detail: { message },
+    });
     return c.json({ error: "invalid_settings", message }, 400);
   }
 });
@@ -63,9 +80,21 @@ zonesRoutes.post("/quick-actions/:action", async (c) => {
         400,
       );
     }
+    logProtocolEvent({
+      category: "user",
+      type: "user.quick_action",
+      message: `Schnellaktion: ${action}`,
+      detail: { action },
+    });
     return c.json({ ok: true, action });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Quick action failed";
+    logProtocolEvent({
+      category: "feedback",
+      type: "feedback.error",
+      message: "Schnellaktion fehlgeschlagen",
+      detail: { action, message },
+    });
     const status = message.includes("not paired") ? 409 : 502;
     return c.json({ error: "quick_action_failed", message }, status);
   }
@@ -95,10 +124,27 @@ zonesRoutes.post("/:zoneId/temperature", async (c) => {
 
   try {
     await setZoneTemperature(zoneId, tempC, { durationMinutes });
+    logProtocolEvent({
+      category: "user",
+      type: "user.setpoint",
+      message: `Solltemperatur ${tempC.toFixed(1)} °C`,
+      roomId: zoneId,
+      detail: {
+        tempC,
+        durationMinutes: durationMinutes ?? null,
+      },
+    });
     return c.json({ ok: true, zoneId, tempC, durationMinutes: durationMinutes ?? null });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Set temperature failed";
     console.error("[zones] set temperature failed:", message);
+    logProtocolEvent({
+      category: "feedback",
+      type: "feedback.error",
+      message: "Solltemperatur setzen fehlgeschlagen",
+      roomId: zoneId,
+      detail: { message },
+    });
     const status = message.includes("not paired") ? 409 : 502;
     return c.json({ error: "set_temperature_failed", message }, status);
   }
@@ -109,9 +155,22 @@ zonesRoutes.post("/:zoneId/overlay/clear", async (c) => {
   const zoneId = c.req.param("zoneId");
   try {
     await clearZoneOverlay(zoneId);
+    logProtocolEvent({
+      category: "user",
+      type: "user.resume_schedule",
+      message: "Zeitplan fortgesetzt",
+      roomId: zoneId,
+    });
     return c.json({ ok: true, zoneId });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Clear overlay failed";
+    logProtocolEvent({
+      category: "feedback",
+      type: "feedback.error",
+      message: "Zeitplan fortsetzen fehlgeschlagen",
+      roomId: zoneId,
+      detail: { message },
+    });
     const status = message.includes("not paired") ? 409 : 502;
     return c.json({ error: "clear_overlay_failed", message }, status);
   }
@@ -136,9 +195,23 @@ zonesRoutes.post("/:zoneId/power", async (c) => {
 
   try {
     await setZonePower(zoneId, mode);
+    logProtocolEvent({
+      category: "user",
+      type: "user.power",
+      message: mode === "off" ? "Heizung aus" : "Heizung an",
+      roomId: zoneId,
+      detail: { mode },
+    });
     return c.json({ ok: true, zoneId, mode });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Set power failed";
+    logProtocolEvent({
+      category: "feedback",
+      type: "feedback.error",
+      message: "Heizung schalten fehlgeschlagen",
+      roomId: zoneId,
+      detail: { mode, message },
+    });
     const status = message.includes("not paired") ? 409 : 502;
     return c.json({ error: "set_power_failed", message }, status);
   }

@@ -10,6 +10,7 @@
 import type { CloudQuotaStatus, HomePresenceStatus } from "@heizplan/shared";
 import { config } from "../../config.js";
 import { fetchHomeState, refreshAccessToken } from "./client.js";
+import { notePresenceMode } from "../protocol/trackers.js";
 import { CloudQuotaExceededError, getCloudQuota } from "./quota.js";
 import {
   loadCloudTokens,
@@ -167,6 +168,7 @@ export async function getHomePresence(opts?: {
       fetchedAt,
       homeId: meta.homeId,
     });
+    notePresenceMode(mode, { fetched: true });
     const label = mode === "home" ? "Zuhause" : "Unterwegs";
     return {
       presence: {

@@ -25,6 +25,7 @@ import {
   timingWindowBounds,
   type RuleRoomAction,
 } from "./match.js";
+import { logProtocolEvent } from "../protocol/event-log.js";
 import {
   isCalendarDismissed,
   loadActiveOverrides,
@@ -144,6 +145,17 @@ export async function reconcileOverrides(
         await clearZoneOverlay(prev.roomId, { skipCalendarClear: true });
       }
       cleared += 1;
+      logProtocolEvent({
+        category: "calendar",
+        type: "calendar.override_clear",
+        message: `Termin-Override beendet${prev.ruleName ? `: ${prev.ruleName}` : ""}`,
+        roomId: prev.roomId,
+        detail: {
+          ruleId: prev.ruleId,
+          ruleName: prev.ruleName,
+          eventUid: prev.eventUid,
+        },
+      });
     } catch (err) {
       console.error(
         "[calendar] clear overlay failed:",
@@ -183,6 +195,19 @@ export async function reconcileOverrides(
       };
       next.push(record);
       applied += 1;
+      logProtocolEvent({
+        category: "calendar",
+        type: "calendar.override_apply",
+        message: `Termin-Override aktiv: ${action.rule.name}`,
+        roomId,
+        detail: {
+          ruleId: action.rule.id,
+          ruleName: action.rule.name,
+          eventUid: action.event.uid,
+          mode: record.mode,
+          targetTempC: record.targetTempC ?? null,
+        },
+      });
     } catch (err) {
       console.error(
         "[calendar] apply failed:",
