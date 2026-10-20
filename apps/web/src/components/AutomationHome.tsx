@@ -19,8 +19,8 @@ export interface AutomationHomeProps {
   calendarConfigured: boolean;
   onOpenCalendar: () => void;
   onOpenWindows: () => void;
-  onRefreshPresence: () => void;
-  presenceBusy?: boolean;
+  onOpenGeofencing: () => void;
+  onOpenHeatup: () => void;
 }
 
 function presenceTitle(p: HomePresenceStatus | undefined): string {
@@ -35,7 +35,7 @@ function presenceHint(p: HomePresenceStatus | undefined): string {
     return "Status von der Tado-Cloud laden";
   }
   if (p.stale) {
-    return "Stand älter — tippen zum Aktualisieren";
+    return "Stand älter — tippen zum Öffnen";
   }
   return p.presenceLocked ? "Manuell gesetzt" : "Geofencing / Auto-Assist";
 }
@@ -48,17 +48,16 @@ function windowSummary(
   if (open.length > 0) {
     return {
       title: open.length === 1 ? `${open[0].name} offen` : `${open.length} Fenster offen`,
-      sub:
-        ow?.globalAutoOff
-          ? "Heizung schaltet dort aus"
-          : "Nur Anzeige — Auto-Aus in Einstellungen",
+      sub: ow?.globalAutoOff
+        ? "Heizung schaltet dort aus"
+        : "Nur Anzeige — Auto-Aus einrichten",
       alert: true,
     };
   }
   if (!ow || ow.detectionEnabled === false) {
     return {
       title: "Fenster aus",
-      sub: "Erkennung in Einstellungen einschalten",
+      sub: "Erkennung einschalten",
       alert: false,
     };
   }
@@ -77,8 +76,8 @@ export function AutomationHome({
   calendarConfigured,
   onOpenCalendar,
   onOpenWindows,
-  onRefreshPresence,
-  presenceBusy = false,
+  onOpenGeofencing,
+  onOpenHeatup,
 }: AutomationHomeProps) {
   const win = windowSummary(zones, openWindow);
 
@@ -89,15 +88,12 @@ export function AutomationHome({
         <button
           type="button"
           className="auto-card auto-card--presence"
-          onClick={onRefreshPresence}
-          disabled={presenceBusy}
-          aria-label={`Home/Away: ${presenceTitle(presence)}. Aktualisieren.`}
+          onClick={onOpenGeofencing}
+          aria-label={`Home/Away: ${presenceTitle(presence)}. Öffnen.`}
         >
           <span className="auto-card__kicker">Geofencing</span>
           <strong className="auto-card__value">{presenceTitle(presence)}</strong>
-          <span className="auto-card__sub">
-            {presenceBusy ? "Aktualisiere…" : presenceHint(presence)}
-          </span>
+          <span className="auto-card__sub">{presenceHint(presence)}</span>
         </button>
 
         <button
@@ -137,7 +133,7 @@ export function AutomationHome({
         <button
           type="button"
           className="auto-card auto-card--heatup"
-          onClick={onOpenCalendar}
+          onClick={onOpenHeatup}
           aria-label="Vorwärmen und Heat-up"
         >
           <span className="auto-card__kicker">Vorwärmen</span>

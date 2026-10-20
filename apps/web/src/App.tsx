@@ -1,5 +1,6 @@
 /**
- * Heizplan PWA — Tado screenshot parity (dark home / detail / settings).
+ * Heizplan PWA — single dashboard shell (Tado dark look).
+ * Home + settings unified; drill-ins via breadcrumbs. No bottom tabs.
  * @package @heizplan/web
  */
 
@@ -11,36 +12,46 @@ import type {
   ZonesResponse,
 } from "@heizplan/shared";
 import {
-  ApiError,
   fetchCalendarStatus,
   fetchCloudQuota,
   fetchHealth,
   fetchOpenWindowSettings,
   fetchZones,
-  refreshHomePresence,
 } from "./api";
 import { AutomationHome } from "./components/AutomationHome";
-import { BottomNav, type NavTab } from "./components/BottomNav";
+import { BridgePanel } from "./components/BridgePanel";
 import { BridgeStatus } from "./components/BridgeStatus";
+import { CalendarRulesScreen } from "./components/CalendarRulesScreen";
 import { CloudLinkPanel } from "./components/CloudLinkPanel";
+import { CloudPanel } from "./components/CloudPanel";
 import { CloudQuotaBadge } from "./components/CloudQuotaBadge";
+import { DisplayPanel } from "./components/DisplayPanel";
+import { GeofencingPanel } from "./components/GeofencingPanel";
 import { HomeCloudSync } from "./components/HomeCloudSync";
-import { MoreScreen } from "./components/MoreScreen";
+import { OpenWindowPanel } from "./components/OpenWindowPanel";
 import { RoomDetail } from "./components/RoomDetail";
 import { RoomGrid } from "./components/RoomGrid";
-import { CalendarRulesScreen } from "./components/CalendarRulesScreen";
 import { ScheduleScreen } from "./components/ScheduleScreen";
-import { SettingsScreen } from "./components/SettingsScreen";
-import { ChevronDownIcon } from "./components/icons";
+import { ChevronDownIcon, ChevronIcon } from "./components/icons";
 
 const POLL_MS = 15_000;
 const HUMIDITY_KEY = "heizplan.showHumidity";
 const HOME_NAME_KEY = "heizplan.homeName";
-type Overlay =
-  | { kind: "none" }
+
+/**
+ * Navigation model — one dashboard root + breadcrumb drill-ins.
+ * Reserved for a later turn (do not implement UI yet): "protocol" / Protokoll logs.
+ */
+type AppView =
+  | { kind: "dashboard" }
+  | { kind: "windows" }
+  | { kind: "cloud" }
+  | { kind: "bridge" }
+  | { kind: "geofencing" }
+  | { kind: "display" }
+  | { kind: "calendar-rules"; zoneId?: string }
   | { kind: "room"; zoneId: string }
-  | { kind: "schedule"; zoneId: string }
-  | { kind: "calendar-rules"; zoneId?: string };
+  | { kind: "schedule"; zoneId: string };
 
 function readBool(key: string, fallback: boolean): boolean {
   try {
@@ -61,8 +72,7 @@ export function App() {
   const [offline, setOffline] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
-  const [tab, setTab] = useState<NavTab>("home");
-  const [overlay, setOverlay] = useState<Overlay>({ kind: "none" });
+  const [view, setView] = useState<AppView>({ kind: "dashboard" });
   const [showHumidity, setShowHumidity] = useState(() => readBool(HUMIDITY_KEY, true));
   const [quota, setQuota] = useState<CloudQuotaStatus | null>(null);
   const [quotaLoading, setQuotaLoading] = useState(true);
@@ -72,7 +82,6 @@ export function App() {
     configured: boolean;
   }>({ ruleCount: 0, configured: false });
   const [openWindow, setOpenWindow] = useState<OpenWindowSettings | null>(null);
-  const [presenceBusy, setPresenceBusy] = useState(false);
   const [homeName] = useState(() => {
     try {
       return localStorage.getItem(HOME_NAME_KEY) || "Zuhause";
@@ -83,6 +92,8 @@ export function App() {
   const visibleRef = useRef(
     typeof document !== "undefined" ? document.visibilityState !== "hidden" : true,
   );
+
+  const goDashboard = useCallback(() => setView({ kind: "dashboard" }), []);
 
   const load = useCallback(async (opts?: { quiet?: boolean }) => {
     if (!opts?.quiet) {
@@ -167,23 +178,7 @@ export function App() {
     return () => {
       cancelled = true;
     };
-  }, [overlay.kind]);
-
-  async function refreshPresenceFromHome(): Promise<void> {
-    setPresenceBusy(true);
-    try {
-      const res = await refreshHomePresence(true);
-      setQuota(res.quota);
-      setQuotaUnavailable(null);
-      await load({ quiet: true });
-    } catch (err) {
-      if (err instanceof ApiError && err.quota) {
-        setQuota(err.quota);
-      }
-    } finally {
-      setPresenceBusy(false);
-    }
-  }
+  }, [view.kind]);
 
   useEffect(() => {
     try {
@@ -262,64 +257,68 @@ export function App() {
     });
   }
 
+  function afterCalendarBack(zoneId?: string): void {
+    void fetchCalendarStatus()
+      .then((s) => {
+        setCalendarMeta({
+          ruleCount: s.rules?.length ?? 0,
+          configured: Boolean(s.connection?.configured),
+        });
+      })
+      .catch(() => {
+        /* ignore */
+      });
+    if (zoneId) {
+      setView({ kind: "schedule", zoneId });
+    } else {
+      goDashboard();
+    }
+  }
+
   const roomZone =
-    overlay.kind === "room" || overlay.kind === "schedule"
-      ? zones?.zones.find((z) => z.id === overlay.zoneId)
+    view.kind === "room" || view.kind === "schedule"
+      ? zones?.zones.find((z) => z.id === view.zoneId)
       : undefined;
 
-  if (overlay.kind === "calendar-rules") {
+  if (view.kind === "calendar-rules") {
     return (
-      <div className="app-shell app-shell--overlay">
+      <div className="app-shell app-shell--drill">
         <CalendarRulesScreen
           zones={zones?.zones ?? []}
-          focusRoomId={overlay.zoneId ?? null}
-          onBack={() => {
-            void fetchCalendarStatus()
-              .then((s) => {
-                setCalendarMeta({
-                  ruleCount: s.rules?.length ?? 0,
-                  configured: Boolean(s.connection?.configured),
-                });
-              })
-              .catch(() => {
-                /* ignore */
-              });
-            if (overlay.zoneId) {
-              setOverlay({ kind: "schedule", zoneId: overlay.zoneId });
-            } else {
-              setOverlay({ kind: "none" });
-            }
-          }}
+          focusRoomId={view.zoneId ?? null}
+          breadcrumbRoot="Heizplan"
+          onBack={() => afterCalendarBack(view.zoneId)}
+          onHome={goDashboard}
           onQuotaChange={setQuota}
         />
       </div>
     );
   }
 
-  if (overlay.kind === "schedule" && roomZone) {
+  if (view.kind === "schedule" && roomZone) {
     return (
-      <div className="app-shell app-shell--overlay">
+      <div className="app-shell app-shell--drill">
         <ScheduleScreen
           zone={roomZone}
-          onBack={() => setOverlay({ kind: "room", zoneId: roomZone.id })}
+          onBack={() => setView({ kind: "room", zoneId: roomZone.id })}
           onQuotaChange={setQuota}
           onOpenCalendarRules={() =>
-            setOverlay({ kind: "calendar-rules", zoneId: roomZone.id })
+            setView({ kind: "calendar-rules", zoneId: roomZone.id })
           }
         />
       </div>
     );
   }
 
-  if (overlay.kind === "room" && roomZone) {
+  if (view.kind === "room" && roomZone) {
     return (
-      <div className="app-shell app-shell--overlay">
+      <div className="app-shell app-shell--drill">
         <RoomDetail
           zone={roomZone}
           interactive={interactive}
           showHumidity={showHumidity}
-          onClose={() => setOverlay({ kind: "none" })}
-          onOpenSchedule={() => setOverlay({ kind: "schedule", zoneId: roomZone.id })}
+          onClose={goDashboard}
+          onOpenSchedule={() => setView({ kind: "schedule", zoneId: roomZone.id })}
           onOptimisticTarget={patchTarget}
           onOptimisticResume={patchResume}
           onChanged={() => void load({ quiet: true })}
@@ -328,146 +327,258 @@ export function App() {
     );
   }
 
-  return (
-    <div className="app-shell app-shell--nav">
-      {tab === "home" ? (
-        <>
-          <button
-            type="button"
-            className="promo-banner"
-            onClick={() => setOverlay({ kind: "calendar-rules" })}
-          >
-            <span className="promo-banner__badge" aria-hidden="true">
-              A
-            </span>
-            <span>Lass uns dein Zuhause vorwärmen</span>
-            <span aria-hidden="true">→</span>
-          </button>
+  if (view.kind === "windows") {
+    return (
+      <div className="app-shell app-shell--drill">
+        <OpenWindowPanel
+          zones={zones?.zones ?? []}
+          onBack={goDashboard}
+          onHome={goDashboard}
+          onSettingsChange={setOpenWindow}
+        />
+      </div>
+    );
+  }
 
-          <header className="home-header">
-            <button type="button" className="home-header__name">
-              {homeName}
-              <ChevronDownIcon />
-            </button>
-          </header>
-
-          <BridgeStatus
-            health={health}
-            zones={zones}
-            offline={offline}
-            lastUpdated={lastUpdated}
-            refreshing={refreshing}
-            onRefresh={() => void load()}
-          />
-
-          {error && offline ? (
-            <div className="error-state" role="alert">
-              {error}
-            </div>
-          ) : null}
-
-          {!offline && health && !health.bridge.paired ? (
-            <div className="callout" role="status">
-              <strong>Bridge nicht gepaart.</strong>
-              {fixtureMode
-                ? " Fixtures aktiv — Layout wie Tado-Screenshots testbar."
-                : " Pairing: POST /api/bridge/pair"}
-            </div>
-          ) : null}
-
-          {!offline &&
-          health?.bridge.paired &&
-          zones?.naming &&
-          zones.naming.source !== "cloud" &&
-          zones.naming.source !== "map" ? (
-            <div className="callout callout--names" role="status">
-              <strong>HAP-Namen aktiv</strong>
-              <span>
-                Einmal Tado Cloud verknüpfen → echte Raumnamen.
-              </span>
-              <CloudLinkPanel naming={zones.naming} onLinked={() => void load({ quiet: true })} />
-            </div>
-          ) : null}
-
-          {!offline ? (
-            <AutomationHome
-              presence={zones?.presence}
-              zones={zones?.zones ?? []}
-              openWindow={openWindow}
-              calendarRuleCount={calendarMeta.ruleCount}
-              calendarConfigured={calendarMeta.configured}
-              onOpenCalendar={() => setOverlay({ kind: "calendar-rules" })}
-              onOpenWindows={() => setTab("settings")}
-              onRefreshPresence={() => void refreshPresenceFromHome()}
-              presenceBusy={presenceBusy}
-            />
-          ) : null}
-
-          <CloudQuotaBadge
-            quota={quota}
-            loading={quotaLoading}
-            unavailableReason={quotaUnavailable}
-          />
-
-          {!offline ? (
-            <HomeCloudSync
-              onSynced={() => void load({ quiet: true })}
-              onQuotaChange={(q) => {
-                setQuota(q);
-                setQuotaUnavailable(null);
-                setQuotaLoading(false);
-              }}
-            />
-          ) : null}
-
-          {!offline ? (
-            <details className="home-rooms">
-              <summary className="home-rooms__summary">
-                Räume (optional · Steuerung in der Tado-App)
-              </summary>
-              <RoomGrid
-                zones={zones?.zones ?? []}
-                showHumidity={showHumidity}
-                onSelect={(zoneId) => setOverlay({ kind: "room", zoneId })}
-              />
-            </details>
-          ) : null}
-
-          <p id="skills-stub" className="footer-note">
-            {live
-              ? "Live · Automatisierung zuerst."
-              : fixtureMode
-                ? "Fixtures · Automations-Dashboard."
-                : "Nach Pairing: Live-Status."}
-          </p>
-        </>
-      ) : null}
-
-      {tab === "settings" ? (
-        <SettingsScreen
-          health={health}
-          zones={zones}
-          showHumidity={showHumidity}
-          onShowHumidityChange={setShowHumidity}
+  if (view.kind === "cloud") {
+    return (
+      <div className="app-shell app-shell--drill">
+        <CloudPanel
+          naming={zones?.naming}
           quota={quota}
+          quotaLoading={quotaLoading}
+          quotaUnavailable={quotaUnavailable}
           onQuotaChange={(q) => {
             setQuota(q);
             setQuotaUnavailable(null);
             setQuotaLoading(false);
           }}
-          quotaLoading={quotaLoading}
-          quotaUnavailable={quotaUnavailable}
-          onZonesRefresh={() => void load({ quiet: true })}
-          onOpenCalendarRules={() => setOverlay({ kind: "calendar-rules" })}
+          onLinked={() => void load({ quiet: true })}
+          onBack={goDashboard}
+          onHome={goDashboard}
+        />
+      </div>
+    );
+  }
+
+  if (view.kind === "bridge") {
+    return (
+      <div className="app-shell app-shell--drill">
+        <BridgePanel
+          health={health}
+          zones={zones}
+          onBack={goDashboard}
+          onHome={goDashboard}
+          onOpenCloud={() => setView({ kind: "cloud" })}
+        />
+      </div>
+    );
+  }
+
+  if (view.kind === "geofencing") {
+    return (
+      <div className="app-shell app-shell--drill">
+        <GeofencingPanel
           presence={zones?.presence}
+          onQuotaChange={(q) => {
+            setQuota(q);
+            setQuotaUnavailable(null);
+          }}
+          onZonesRefresh={() => void load({ quiet: true })}
+          onBack={goDashboard}
+          onHome={goDashboard}
+        />
+      </div>
+    );
+  }
+
+  if (view.kind === "display") {
+    return (
+      <div className="app-shell app-shell--drill">
+        <DisplayPanel
+          showHumidity={showHumidity}
+          onShowHumidityChange={setShowHumidity}
+          onBack={goDashboard}
+          onHome={goDashboard}
+        />
+      </div>
+    );
+  }
+
+  return (
+    <div className="app-shell app-shell--dashboard">
+      <button
+        type="button"
+        className="promo-banner"
+        onClick={() => setView({ kind: "calendar-rules" })}
+      >
+        <span className="promo-banner__badge" aria-hidden="true">
+          A
+        </span>
+        <span>Lass uns dein Zuhause vorwärmen</span>
+        <span aria-hidden="true">→</span>
+      </button>
+
+      <header className="home-header">
+        <button type="button" className="home-header__name">
+          {homeName}
+          <ChevronDownIcon />
+        </button>
+      </header>
+
+      <BridgeStatus
+        health={health}
+        zones={zones}
+        offline={offline}
+        lastUpdated={lastUpdated}
+        refreshing={refreshing}
+        onRefresh={() => void load()}
+        onOpenDetail={() => setView({ kind: "bridge" })}
+      />
+
+      {error && offline ? (
+        <div className="error-state" role="alert">
+          {error}
+        </div>
+      ) : null}
+
+      {!offline && health && !health.bridge.paired ? (
+        <div className="callout" role="status">
+          <strong>Bridge nicht gepaart.</strong>
+          {fixtureMode
+            ? " Fixtures aktiv — Layout wie Tado-Screenshots testbar."
+            : " Pairing: POST /api/bridge/pair"}
+        </div>
+      ) : null}
+
+      {!offline &&
+      health?.bridge.paired &&
+      zones?.naming &&
+      zones.naming.source !== "cloud" &&
+      zones.naming.source !== "map" ? (
+        <div className="callout callout--names" role="status">
+          <strong>HAP-Namen aktiv</strong>
+          <span>Einmal Tado Cloud verknüpfen → echte Raumnamen.</span>
+          <CloudLinkPanel naming={zones.naming} onLinked={() => void load({ quiet: true })} />
+        </div>
+      ) : null}
+
+      {!offline ? (
+        <AutomationHome
+          presence={zones?.presence}
+          zones={zones?.zones ?? []}
+          openWindow={openWindow}
+          calendarRuleCount={calendarMeta.ruleCount}
+          calendarConfigured={calendarMeta.configured}
+          onOpenCalendar={() => setView({ kind: "calendar-rules" })}
+          onOpenWindows={() => setView({ kind: "windows" })}
+          onOpenGeofencing={() => setView({ kind: "geofencing" })}
+          onOpenHeatup={() => setView({ kind: "calendar-rules" })}
         />
       ) : null}
 
-      {tab === "more" ? (
-        <MoreScreen onOpenCalendarRules={() => setOverlay({ kind: "calendar-rules" })} />
+      <section className="dash-system" aria-label="System">
+        <p className="auto-home__label">System</p>
+        <div className="settings-group">
+          <button
+            type="button"
+            className="settings-row settings-row--button"
+            onClick={() => setView({ kind: "cloud" })}
+          >
+            <span className="settings-row__circle" style={{ background: "#636366" }} aria-hidden="true">
+              C
+            </span>
+            <span className="settings-row__label">
+              Cloud &amp; Quota
+              <small className="settings-row__sub">Namen, Limit, Request-Log</small>
+            </span>
+            <span className="settings-row__meta">
+              {quota ? `${quota.remaining}` : "—"}
+            </span>
+            <ChevronIcon className="settings-row__chev" />
+          </button>
+          <button
+            type="button"
+            className="settings-row settings-row--button"
+            onClick={() => setView({ kind: "bridge" })}
+          >
+            <span className="settings-row__circle" style={{ background: "#48484a" }} aria-hidden="true">
+              B
+            </span>
+            <span className="settings-row__label">
+              Bridge
+              <small className="settings-row__sub">Pairing &amp; Verbindung</small>
+            </span>
+            <span className="settings-row__meta">
+              {health?.bridge.paired ? "OK" : "…"}
+            </span>
+            <ChevronIcon className="settings-row__chev" />
+          </button>
+          <button
+            type="button"
+            className="settings-row settings-row--button"
+            onClick={() => setView({ kind: "display" })}
+          >
+            <span className="settings-row__circle" style={{ background: "#3a3a3c" }} aria-hidden="true">
+              D
+            </span>
+            <span className="settings-row__label">
+              Darstellung
+              <small className="settings-row__sub">Luftfeuchtigkeit u. a.</small>
+            </span>
+            <ChevronIcon className="settings-row__chev" />
+          </button>
+          {/*
+            Reserved System row — Parent turn after Unify:
+            Protokoll (kind: "protocol") with PageChrome `Heizplan › Protokoll`.
+            Events: polling, UI interactions, feedback + agent-analysis
+            (calendar apply/clear, presence changes, quota near-limit/block,
+            window open/auto-off/resume, heat-up accept/reject, schedule sync,
+            bridge disconnect). Do not implement in this branch.
+          */}
+        </div>
+      </section>
+
+      <CloudQuotaBadge
+        quota={quota}
+        loading={quotaLoading}
+        unavailableReason={quotaUnavailable}
+      />
+
+      {!offline ? (
+        <HomeCloudSync
+          onSynced={() => void load({ quiet: true })}
+          onQuotaChange={(q) => {
+            setQuota(q);
+            setQuotaUnavailable(null);
+            setQuotaLoading(false);
+          }}
+        />
       ) : null}
 
-      <BottomNav active={tab} onChange={setTab} />
+      {!offline ? (
+        <details className="home-rooms">
+          <summary className="home-rooms__summary">
+            Räume (optional · Steuerung in der Tado-App)
+          </summary>
+          <RoomGrid
+            zones={zones?.zones ?? []}
+            showHumidity={showHumidity}
+            onSelect={(zoneId) => setView({ kind: "room", zoneId })}
+          />
+        </details>
+      ) : null}
+
+      <p className="footer-note">
+        {live
+          ? "Live · Automatisierung zuerst."
+          : fixtureMode
+            ? "Fixtures · Automations-Dashboard."
+            : "Nach Pairing: Live-Status."}
+      </p>
     </div>
   );
 }
+
+/** Exported for upcoming Protokoll turn — keep kind name stable. */
+export type ReservedProtocolView = { kind: "protocol" };

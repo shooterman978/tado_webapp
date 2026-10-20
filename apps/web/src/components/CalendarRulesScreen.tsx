@@ -29,12 +29,17 @@ import {
 } from "../api";
 import { BackIcon } from "./icons";
 import { CalendarConnectionPanel } from "./CalendarConnectionPanel";
+import { PageChrome } from "./PageChrome";
 
 interface CalendarRulesScreenProps {
   zones: Zone[];
   onBack: () => void;
   onQuotaChange?: (quota: CloudQuotaStatus) => void;
   focusRoomId?: string | null;
+  /** Root crumb label when embedded in the unified dashboard. */
+  breadcrumbRoot?: string;
+  /** Jump to dashboard root (breadcrumb). */
+  onHome?: () => void;
 }
 
 type WizardStep =
@@ -215,6 +220,8 @@ export function CalendarRulesScreen({
   onBack,
   onQuotaChange,
   focusRoomId,
+  breadcrumbRoot = "Heizplan",
+  onHome,
 }: CalendarRulesScreenProps) {
   const [step, setStep] = useState<WizardStep>("overview");
   const [status, setStatus] = useState<CalendarStatusResponse | null>(null);
@@ -590,20 +597,29 @@ export function CalendarRulesScreen({
 
   return (
     <div className="cal-wiz">
-      <header className="schedule__bar">
-        <button
-          type="button"
-          className="icon-btn-ghost"
-          onClick={step === "overview" ? onBack : stepBack}
-          aria-label="Zurück"
-        >
-          <BackIcon />
-        </button>
-        <h1>{headerTitle}</h1>
-        <span className="cal-wiz__step-pill" aria-hidden="true">
-          {stepPill}
-        </span>
-      </header>
+      {step === "overview" || step === "advanced" ? (
+        <PageChrome
+          current={headerTitle}
+          rootLabel={breadcrumbRoot}
+          onBack={step === "overview" ? onBack : stepBack}
+          onHome={onHome ?? onBack}
+        />
+      ) : (
+        <header className="schedule__bar">
+          <button
+            type="button"
+            className="icon-btn-ghost"
+            onClick={stepBack}
+            aria-label="Zurück"
+          >
+            <BackIcon />
+          </button>
+          <h1>{headerTitle}</h1>
+          <span className="cal-wiz__step-pill" aria-hidden="true">
+            {stepPill}
+          </span>
+        </header>
+      )}
 
       {error ? (
         <p className="error-state" role="alert">

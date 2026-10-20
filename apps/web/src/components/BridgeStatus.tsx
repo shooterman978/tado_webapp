@@ -14,6 +14,8 @@ interface BridgeStatusProps {
   lastUpdated: Date | null;
   refreshing: boolean;
   onRefresh: () => void;
+  /** Optional drill-in to Bridge panel (dashboard unify). */
+  onOpenDetail?: () => void;
 }
 
 function classify(
@@ -59,17 +61,31 @@ export function BridgeStatus({
   lastUpdated,
   refreshing,
   onRefresh,
+  onOpenDetail,
 }: BridgeStatusProps) {
   const kind = classify(health, zones, offline);
   return (
     <section className={`bridge-status bridge-status--${kind}`} aria-live="polite">
       <span className="bridge-status__dot" aria-hidden="true" />
-      <p className="bridge-status__title">
-        {LABELS[kind]}
-        {lastUpdated
-          ? ` · ${lastUpdated.toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" })}`
-          : ""}
-      </p>
+      {onOpenDetail ? (
+        <button
+          type="button"
+          className="bridge-status__title bridge-status__title--btn"
+          onClick={onOpenDetail}
+        >
+          {LABELS[kind]}
+          {lastUpdated
+            ? ` · ${lastUpdated.toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" })}`
+            : ""}
+        </button>
+      ) : (
+        <p className="bridge-status__title">
+          {LABELS[kind]}
+          {lastUpdated
+            ? ` · ${lastUpdated.toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" })}`
+            : ""}
+        </p>
+      )}
       <button
         type="button"
         className="bridge-status__refresh"

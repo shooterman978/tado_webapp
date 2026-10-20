@@ -51,18 +51,109 @@ input {
   margin: 0 auto;
   min-height: 100dvh;
   padding: var(--space);
-  /* Last tile row must clear the fixed bottom nav (incl. home indicator). */
-  padding-bottom: calc(var(--nav-h) + env(safe-area-inset-bottom, 0px) + 2.75rem);
+  padding-bottom: calc(var(--space) + env(safe-area-inset-bottom, 0px) + 1.5rem);
   background: var(--bg);
 }
 
-.app-shell--nav .footer-note {
-  display: none; /* saves vertical space; chrome already shows live/fixture state */
+.app-shell--dashboard .footer-note {
+  margin-top: 1rem;
+  font-size: 0.72rem;
+  color: var(--ink-dim);
+  text-align: center;
 }
 
+.app-shell--drill,
 .app-shell--overlay {
   padding-bottom: calc(var(--space) + env(safe-area-inset-bottom, 0px));
   min-height: 100dvh;
+}
+
+/* —— Breadcrumb chrome (drill-ins) —— */
+
+.page-chrome {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin: 0 0 1rem;
+  min-height: 2.5rem;
+}
+
+.page-chrome__back {
+  flex-shrink: 0;
+}
+
+.page-chrome__trail {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.35rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  min-width: 0;
+}
+
+.page-chrome__crumb {
+  display: flex;
+  align-items: baseline;
+  gap: 0.35rem;
+  min-width: 0;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--ink-muted);
+}
+
+.page-chrome__crumb + .page-chrome__crumb::before {
+  content: "›";
+  color: var(--ink-dim);
+  font-weight: 500;
+}
+
+.page-chrome__link {
+  appearance: none;
+  border: none;
+  background: transparent;
+  padding: 0;
+  color: #0a84ff;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.page-chrome__crumb--current {
+  color: var(--ink);
+  font-family: var(--font-brand);
+  font-size: 1.15rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dash-panel {
+  min-height: 100%;
+}
+
+.dash-system {
+  margin: 0.25rem 0 1rem;
+}
+
+.bridge-status__title--btn {
+  appearance: none;
+  border: none;
+  background: transparent;
+  padding: 0;
+  margin: 0;
+  text-align: left;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* —— Automation home (Tado dark cards) —— */
@@ -625,47 +716,7 @@ input {
   flex-shrink: 0;
 }
 
-/* —— Bottom nav —— */
-
-.bottom-nav {
-  position: fixed;
-  left: 50%;
-  bottom: 0;
-  transform: translateX(-50%);
-  width: min(28rem, 100%);
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 0.25rem;
-  min-height: var(--nav-h);
-  padding: 0.55rem 0.75rem calc(0.65rem + env(safe-area-inset-bottom, 0px));
-  background: rgba(0, 0, 0, 0.94);
-  border-top: 1px solid var(--line);
-  backdrop-filter: blur(12px);
-  z-index: 40;
-}
-
-.bottom-nav__item {
-  appearance: none;
-  border: none;
-  background: transparent;
-  color: var(--ink-dim);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 0.2rem;
-  padding: 0.35rem;
-  font-size: 0.68rem;
-  font-weight: 600;
-  cursor: pointer;
-}
-
-.bottom-nav__item svg {
-  font-size: 1.35rem;
-}
-
-.bottom-nav__item.is-active {
-  color: #fff;
-}
+/* Bottom nav removed — single dashboard + breadcrumbs (see product-focus.md). */
 
 /* —— Room detail (01) —— */
 
