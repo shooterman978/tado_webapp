@@ -696,7 +696,13 @@ export function CalendarRulesScreen({
               </button>
             </>
           ) : (
-            <p className="cal-wiz__meta">Noch keine Regeln.</p>
+            <div className="empty-panel empty-panel--compact cal-wiz__empty" role="status">
+              <strong className="empty-panel__title">Noch keine Regeln</strong>
+              <p className="empty-panel__body">
+                Tippe auf „Neue Regel anlegen“ — der Assistent führt dich durch Kalender,
+                Räume und Timing.
+              </p>
+            </div>
           )}
           <button
             type="button"

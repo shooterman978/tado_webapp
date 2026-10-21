@@ -21,8 +21,12 @@ interface RoomGridProps {
 export function RoomGrid({ zones, showHumidity, onSelect }: RoomGridProps) {
   if (zones.length === 0) {
     return (
-      <div className="empty-state" role="status">
-        Noch keine Räume.
+      <div className="empty-panel empty-panel--compact" role="status">
+        <strong className="empty-panel__title">Noch keine Räume</strong>
+        <p className="empty-panel__body">
+          Sobald die Bridge verbunden ist, erscheinen die Räume hier. Alltagstemperaturen
+          stellst du in der Tado-App ein.
+        </p>
       </div>
     );
   }

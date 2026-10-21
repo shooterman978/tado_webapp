@@ -34,13 +34,16 @@ export function PageChrome({
         <BackIcon />
       </button>
       <ol className="page-chrome__trail">
-        <li className="page-chrome__crumb">
+        <li className="page-chrome__crumb page-chrome__crumb--root">
           <button type="button" className="page-chrome__link" onClick={goHome}>
             {rootLabel}
           </button>
         </li>
-        <li className="page-chrome__crumb page-chrome__crumb--current" aria-current="page">
-          {current}
+        <li
+          className="page-chrome__crumb page-chrome__crumb--current"
+          aria-current="page"
+        >
+          <span className="page-chrome__current">{current}</span>
         </li>
       </ol>
     </nav>

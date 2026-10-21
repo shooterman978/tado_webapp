@@ -21,14 +21,14 @@ export interface ProtocolPanelProps {
 
 const CATEGORY_LABELS: Record<ProtocolEventCategory | "all", string> = {
   all: "Alle",
-  polling: "Polling",
+  polling: "Abfrage",
   user: "Bedienung",
-  feedback: "Feedback",
+  feedback: "Hinweise",
   calendar: "Termine",
-  presence: "Presence",
-  quota: "Quota",
+  presence: "Zuhause/Weg",
+  quota: "Kontingent",
   window: "Fenster",
-  heatup: "Heat-up",
+  heatup: "Vorwärmen",
   schedule: "Zeitplan",
   bridge: "Bridge",
   system: "System",
@@ -278,12 +278,39 @@ export function ProtocolPanel({
       </div>
 
       {error ? (
-        <p className="error-state" role="alert">
-          {error}
-        </p>
+        <div className="empty-panel empty-panel--danger" role="alert">
+          <strong className="empty-panel__title">Protokoll nicht geladen</strong>
+          <p className="empty-panel__body">{error}</p>
+          <button
+            type="button"
+            className="empty-panel__action"
+            onClick={() => void load()}
+          >
+            Erneut versuchen
+          </button>
+        </div>
       ) : null}
 
-      {emptyHint ? <p className="cloud-log__empty">{emptyHint}</p> : null}
+      {emptyHint && !error ? (
+        <div className="empty-panel empty-panel--compact" role="status">
+          <strong className="empty-panel__title">Noch nichts zu sehen</strong>
+          <p className="empty-panel__body">{emptyHint}</p>
+          {search || category !== "all" || range !== "all" ? (
+            <button
+              type="button"
+              className="empty-panel__action empty-panel__action--ghost"
+              onClick={() => {
+                setSearch("");
+                setSearchDraft("");
+                setCategory("all");
+                setRange("all");
+              }}
+            >
+              Filter zurücksetzen
+            </button>
+          ) : null}
+        </div>
+      ) : null}
 
       <ul className="protocol-list">
         {entries.map((entry) => (

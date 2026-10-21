@@ -18,7 +18,7 @@ interface CloudQuotaBadgeProps {
 }
 
 export function formatQuotaLabel(quota: CloudQuotaStatus): string {
-  return `Heute: ${quota.used} / ${quota.limit} Cloud-Requests`;
+  return `Heute: ${quota.used} / ${quota.limit} Cloud-Anfragen`;
 }
 
 export function CloudQuotaBadge({
@@ -31,12 +31,12 @@ export function CloudQuotaBadge({
     const label = loading
       ? compact
         ? "…"
-        : "Cloud-Requests: laden …"
+        : "Cloud-Anfragen: laden …"
       : compact
         ? "—/—"
         : unavailableReason
-          ? `Cloud-Requests: nicht verfügbar (${unavailableReason})`
-          : "Cloud-Requests: nicht verfügbar";
+          ? `Cloud-Anfragen: nicht verfügbar (${unavailableReason})`
+          : "Cloud-Anfragen: nicht verfügbar";
     return (
       <div className="cloud-quota-badge is-unavailable" role="status">
         <span className="cloud-quota-badge__label">{label}</span>

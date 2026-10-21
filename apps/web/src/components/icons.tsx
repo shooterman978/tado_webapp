@@ -141,3 +141,69 @@ export function WindowIcon({ className, title = "Fenster offen" }: IconProps) {
     </svg>
   );
 }
+
+export function CloudIcon({ className }: IconProps) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" width="1em" height="1em" aria-hidden="true">
+      <path
+        fill="currentColor"
+        d="M7.5 19A5.5 5.5 0 0 1 6.1 8.2 6.5 6.5 0 0 1 18.8 9.1 4.5 4.5 0 0 1 19.5 19H7.5z"
+      />
+    </svg>
+  );
+}
+
+export function BridgeIcon({ className }: IconProps) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" width="1em" height="1em" aria-hidden="true">
+      <path
+        fill="currentColor"
+        d="M4 16a1 1 0 0 1 1-1h1.2l1.3-6.2A3 3 0 0 1 10.4 6h3.2a3 3 0 0 1 2.9 2.8L17.8 15H19a1 1 0 1 1 0 2H5a1 1 0 0 1-1-1zm5.3-7.2L8.3 15h7.4l-1-6.2a1 1 0 0 0-1-.8h-3.2a1 1 0 0 0-1 .8zM7 19a1 1 0 1 0 0-2 1 1 0 0 0 0 2zm10 0a1 1 0 1 0 0-2 1 1 0 0 0 0 2z"
+      />
+    </svg>
+  );
+}
+
+export function DisplayIcon({ className }: IconProps) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" width="1em" height="1em" aria-hidden="true">
+      <path
+        fill="currentColor"
+        d="M5 4h14a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-5v2h2a1 1 0 1 1 0 2H8a1 1 0 1 1 0-2h2v-2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2zm0 2v9h14V6H5z"
+      />
+    </svg>
+  );
+}
+
+export function ProtocolIcon({ className }: IconProps) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" width="1em" height="1em" aria-hidden="true">
+      <path
+        fill="currentColor"
+        d="M7 3h10a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2zm0 2v14h10V5H7zm2 2h6a1 1 0 1 1 0 2H9a1 1 0 1 1 0-2zm0 4h6a1 1 0 1 1 0 2H9a1 1 0 1 1 0-2zm0 4h4a1 1 0 1 1 0 2H9a1 1 0 1 1 0-2z"
+      />
+    </svg>
+  );
+}
+
+export function WarmupIcon({ className }: IconProps) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" width="1em" height="1em" aria-hidden="true">
+      <path
+        fill="currentColor"
+        d="M12 2a1 1 0 0 1 1 1v1.1a7 7 0 0 1 5.2 5.2H19.4a1 1 0 1 1 0 2h-1.2A7 7 0 0 1 13 16.9V20h2a1 1 0 1 1 0 2H9a1 1 0 1 1 0-2h2v-3.1A7 7 0 0 1 5.8 11.2H4.6a1 1 0 1 1 0-2h1.2A7 7 0 0 1 11 4.1V3a1 1 0 0 1 1-1zm0 4a5 5 0 1 0 0 10 5 5 0 0 0 0-10z"
+      />
+    </svg>
+  );
+}
+
+export function RetryIcon({ className }: IconProps) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" width="1em" height="1em" aria-hidden="true">
+      <path
+        fill="currentColor"
+        d="M12 5a7 7 0 1 0 6.7 9.1 1 1 0 1 1 1.9.6A9 9 0 1 1 12 3v2zm4.3-.7a1 1 0 0 1 0 1.4l-2.3 2.3H17a1 1 0 1 1 0 2h-5a1 1 0 0 1-.7-1.7l3.2-3.2a1 1 0 0 1 1.4 0z"
+      />
+    </svg>
+  );
+}

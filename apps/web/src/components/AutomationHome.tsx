@@ -134,12 +134,12 @@ export function AutomationHome({
           type="button"
           className="auto-card auto-card--heatup"
           onClick={onOpenHeatup}
-          aria-label="Vorwärmen und Heat-up"
+          aria-label="Vorwärmen vor Terminen"
         >
           <span className="auto-card__kicker">Vorwärmen</span>
-          <strong className="auto-card__value">Heat-up</strong>
+          <strong className="auto-card__value">Rechtzeitig warm</strong>
           <span className="auto-card__sub">
-            Rechtzeitig warm vor Terminen
+            Heizung startet vor dem Termin
           </span>
         </button>
       </div>
