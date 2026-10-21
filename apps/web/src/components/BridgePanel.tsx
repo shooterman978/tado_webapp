@@ -4,7 +4,7 @@
  */
 
 import type { HealthStatus, ZonesResponse } from "@heizplan/shared";
-import { PageChrome } from "./PageChrome";
+import { PageChrome, type BreadcrumbAncestor } from "./PageChrome";
 
 export interface BridgePanelProps {
   health: HealthStatus | null;
@@ -12,6 +12,7 @@ export interface BridgePanelProps {
   onBack: () => void;
   onHome?: () => void;
   onOpenCloud?: () => void;
+  ancestors?: BreadcrumbAncestor[];
 }
 
 export function BridgePanel({
@@ -20,10 +21,16 @@ export function BridgePanel({
   onBack,
   onHome,
   onOpenCloud,
+  ancestors,
 }: BridgePanelProps) {
   return (
     <div className="dash-panel">
-      <PageChrome current="Bridge" onBack={onBack} onHome={onHome} />
+      <PageChrome
+        current="Bridge"
+        ancestors={ancestors}
+        onBack={onBack}
+        onHome={onHome}
+      />
 
       <p className="settings__section-label">Verbindung</p>
       <div className="settings-group">

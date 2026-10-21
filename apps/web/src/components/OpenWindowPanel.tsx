@@ -10,13 +10,14 @@ import type {
   Zone,
 } from "@heizplan/shared";
 import { fetchOpenWindowSettings, saveOpenWindowSettings } from "../api";
-import { PageChrome } from "./PageChrome";
+import { PageChrome, type BreadcrumbAncestor } from "./PageChrome";
 
 export interface OpenWindowPanelProps {
   zones: Zone[];
   onBack: () => void;
   onHome?: () => void;
   onSettingsChange?: (ow: OpenWindowSettings) => void;
+  ancestors?: BreadcrumbAncestor[];
 }
 
 export function OpenWindowPanel({
@@ -24,6 +25,7 @@ export function OpenWindowPanel({
   onBack,
   onHome,
   onSettingsChange,
+  ancestors,
 }: OpenWindowPanelProps) {
   const [ow, setOw] = useState<OpenWindowSettings | null>(null);
   const [owError, setOwError] = useState<string | null>(null);
@@ -75,7 +77,12 @@ export function OpenWindowPanel({
 
   return (
     <div className="dash-panel">
-      <PageChrome current="Fenster" onBack={onBack} onHome={onHome} />
+      <PageChrome
+        current="Fenster"
+        ancestors={ancestors}
+        onBack={onBack}
+        onHome={onHome}
+      />
 
       <div className="settings-group settings-group--window">
         <div className="settings-explain" role="note">

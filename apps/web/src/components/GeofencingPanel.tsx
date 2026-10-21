@@ -6,7 +6,7 @@
 import { useEffect, useState } from "react";
 import type { CloudQuotaStatus, HomePresenceStatus } from "@heizplan/shared";
 import { ApiError, refreshHomePresence } from "../api";
-import { PageChrome } from "./PageChrome";
+import { PageChrome, type BreadcrumbAncestor } from "./PageChrome";
 
 export interface GeofencingPanelProps {
   presence?: HomePresenceStatus | null;
@@ -15,6 +15,7 @@ export interface GeofencingPanelProps {
   onZonesRefresh?: () => void;
   onBack: () => void;
   onHome?: () => void;
+  ancestors?: BreadcrumbAncestor[];
 }
 
 function modeLabel(p: HomePresenceStatus | null | undefined): string {
@@ -31,6 +32,7 @@ export function GeofencingPanel({
   onZonesRefresh,
   onBack,
   onHome,
+  ancestors,
 }: GeofencingPanelProps) {
   const [local, setLocal] = useState<HomePresenceStatus | null>(presence);
   const [busy, setBusy] = useState(false);
@@ -63,7 +65,12 @@ export function GeofencingPanel({
 
   return (
     <div className="dash-panel">
-      <PageChrome current="Geofencing" onBack={onBack} onHome={onHome} />
+      <PageChrome
+        current="Geofencing"
+        ancestors={ancestors}
+        onBack={onBack}
+        onHome={onHome}
+      />
 
       <div className="settings-explain" role="note">
         <strong>Home / Away</strong>

@@ -1,14 +1,26 @@
 /**
  * Breadcrumb chrome for drill-in screens (single dashboard shell).
+ * Always renders the full path: Heizplan › … › current.
  * @package @heizplan/web
  */
 
 import { BackIcon } from "./icons";
 
+/** Clickable parent segment between root and current. */
+export interface BreadcrumbAncestor {
+  label: string;
+  onNavigate: () => void;
+}
+
 export interface PageChromeProps {
-  /** Current page label (last crumb). */
+  /** Current page label (last crumb, not clickable). */
   current: string;
-  /** Navigate back one level (usually to dashboard). */
+  /**
+   * Intermediate parents between root and current (full path).
+   * Example: System hub child → [{ label: "System", onNavigate: goSystem }].
+   */
+  ancestors?: BreadcrumbAncestor[];
+  /** Navigate back one level. */
   onBack: () => void;
   /** Jump to dashboard root. */
   onHome?: () => void;
@@ -18,6 +30,7 @@ export interface PageChromeProps {
 
 export function PageChrome({
   current,
+  ancestors = [],
   onBack,
   onHome,
   rootLabel = "Heizplan",
@@ -34,11 +47,25 @@ export function PageChrome({
         <BackIcon />
       </button>
       <ol className="page-chrome__trail">
-        <li className="page-chrome__crumb page-chrome__crumb--root">
+        <li className="page-chrome__crumb page-chrome__crumb--nav">
           <button type="button" className="page-chrome__link" onClick={goHome}>
             {rootLabel}
           </button>
         </li>
+        {ancestors.map((crumb) => (
+          <li
+            key={crumb.label}
+            className="page-chrome__crumb page-chrome__crumb--nav"
+          >
+            <button
+              type="button"
+              className="page-chrome__link"
+              onClick={crumb.onNavigate}
+            >
+              {crumb.label}
+            </button>
+          </li>
+        ))}
         <li
           className="page-chrome__crumb page-chrome__crumb--current"
           aria-current="page"

@@ -9,6 +9,7 @@ import type {
   CloudQuotaStatus,
   HealthStatus,
   OpenWindowSettings,
+  ProtocolEventCategory,
   ZonesResponse,
 } from "@heizplan/shared";
 import {
@@ -31,7 +32,11 @@ import { EmptyState } from "./components/EmptyState";
 import { GeofencingPanel } from "./components/GeofencingPanel";
 import { HomeCloudSync } from "./components/HomeCloudSync";
 import { OpenWindowPanel } from "./components/OpenWindowPanel";
-import { ProtocolPanel } from "./components/ProtocolPanel";
+import type { BreadcrumbAncestor } from "./components/PageChrome";
+import {
+  ProtocolPanel,
+  type ProtocolRangePreset,
+} from "./components/ProtocolPanel";
 import { RoomDetail } from "./components/RoomDetail";
 import { RoomGrid } from "./components/RoomGrid";
 import { ScheduleScreen } from "./components/ScheduleScreen";
@@ -48,6 +53,7 @@ type SystemVia = "dashboard" | "system";
 /**
  * Navigation model — one dashboard root + breadcrumb drill-ins.
  * Automations first; System/Cloud/Quota live behind a single hub.
+ * Deep-link example: `{ kind: "protocol", filter: "quota", range: "today" }`.
  */
 type AppView =
   | { kind: "dashboard" }
@@ -57,7 +63,13 @@ type AppView =
   | { kind: "bridge"; via?: SystemVia }
   | { kind: "geofencing" }
   | { kind: "display"; via?: SystemVia }
-  | { kind: "protocol"; via?: SystemVia }
+  | {
+      kind: "protocol";
+      via?: SystemVia;
+      /** Preselect Protokoll category chip (Cloud → Kontingent). */
+      filter?: ProtocolEventCategory | "all";
+      range?: ProtocolRangePreset;
+    }
   | { kind: "calendar-rules"; zoneId?: string }
   | { kind: "room"; zoneId: string }
   | { kind: "schedule"; zoneId: string };
@@ -111,6 +123,14 @@ export function App() {
     } else {
       goDashboard();
     }
+  }
+
+  /** Full crumb parents when opened via System hub. */
+  function systemAncestors(via?: SystemVia): BreadcrumbAncestor[] {
+    if (via !== "system") {
+      return [];
+    }
+    return [{ label: "System", onNavigate: goSystem }];
   }
 
   const load = useCallback(async (opts?: { quiet?: boolean }) => {
@@ -406,8 +426,14 @@ export function App() {
           onSynced={() => void load({ quiet: true })}
           onBack={() => backFromSystemChild(view.via)}
           onHome={goDashboard}
+          ancestors={systemAncestors(view.via)}
           onOpenProtocol={() =>
-            setView({ kind: "protocol", via: view.via ?? "dashboard" })
+            setView({
+              kind: "protocol",
+              via: view.via === "system" ? "system" : "dashboard",
+              filter: "quota",
+              range: "today",
+            })
           }
         />
       </div>
@@ -422,6 +448,7 @@ export function App() {
           zones={zones}
           onBack={() => backFromSystemChild(view.via)}
           onHome={goDashboard}
+          ancestors={systemAncestors(view.via)}
           onOpenCloud={() => setView({ kind: "cloud", via: view.via ?? "dashboard" })}
         />
       </div>
@@ -453,6 +480,7 @@ export function App() {
           onShowHumidityChange={setShowHumidity}
           onBack={() => backFromSystemChild(view.via)}
           onHome={goDashboard}
+          ancestors={systemAncestors(view.via)}
         />
       </div>
     );
@@ -462,8 +490,12 @@ export function App() {
     return (
       <div className="app-shell app-shell--drill">
         <ProtocolPanel
+          key={`protocol-${view.filter ?? "all"}-${view.range ?? "today"}`}
           onBack={() => backFromSystemChild(view.via)}
           onHome={goDashboard}
+          ancestors={systemAncestors(view.via)}
+          initialCategory={view.filter ?? "all"}
+          initialRange={view.range ?? "today"}
           onOpenCloud={() =>
             setView({ kind: "cloud", via: view.via ?? "dashboard" })
           }

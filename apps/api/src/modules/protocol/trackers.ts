@@ -110,7 +110,7 @@ export function noteQuotaStatus(status: CloudQuotaStatus): void {
     logProtocolEvent({
       category: "quota",
       type: "quota.blocked",
-      message: `Cloud-Quota erschöpft (${status.used}/${status.limit})`,
+      message: `Cloud-Kontingent erschöpft (${status.used}/${status.limit})`,
       detail: {
         used: status.used,
         limit: status.limit,
@@ -126,7 +126,7 @@ export function noteQuotaStatus(status: CloudQuotaStatus): void {
     logProtocolEvent({
       category: "quota",
       type: "quota.near_limit",
-      message: `Cloud-Quota nahe Limit (${status.remaining} übrig)`,
+      message: `Cloud-Kontingent nahe Limit (${status.remaining} übrig)`,
       detail: {
         used: status.used,
         limit: status.limit,
@@ -137,6 +137,45 @@ export function noteQuotaStatus(status: CloudQuotaStatus): void {
   }
   lastQuotaNear = status.nearLimit;
   lastQuotaBlocked = status.blocked;
+}
+
+/**
+ * Mirror one counted cloud HTTP call into the protocol ring
+ * (same source of truth as cloud-quota-log.json).
+ */
+export function noteCloudRequest(meta: {
+  method: string;
+  path: string;
+  label: string;
+  delta: number;
+  groupId?: string | null;
+  groupLabel?: string | null;
+  used: number;
+  limit: number;
+}): void {
+  const label =
+    meta.groupLabel?.trim() ||
+    meta.label?.trim() ||
+    "Cloud-Anfrage";
+  const pathShort = meta.path.replace(/^\/api\/v2/, "") || meta.path;
+  logProtocolEvent({
+    category: "quota",
+    type: "quota.request",
+    message:
+      meta.delta > 1
+        ? `Cloud-Request: ${label} (+${meta.delta})`
+        : `Cloud-Request: ${label}`,
+    detail: {
+      method: meta.method,
+      path: pathShort.slice(0, 200),
+      delta: meta.delta,
+      label: meta.label.slice(0, 120),
+      groupId: meta.groupId ?? null,
+      groupLabel: meta.groupLabel ?? null,
+      used: meta.used,
+      limit: meta.limit,
+    },
+  });
 }
 
 export function noteWindowState(

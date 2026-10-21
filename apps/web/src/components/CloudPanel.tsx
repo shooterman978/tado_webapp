@@ -10,7 +10,7 @@ import { CloudLinkPanel } from "./CloudLinkPanel";
 import { CloudQuotaBadge, formatQuotaLabel } from "./CloudQuotaBadge";
 import { CloudRequestLog } from "./CloudRequestLog";
 import { HomeCloudSync } from "./HomeCloudSync";
-import { PageChrome } from "./PageChrome";
+import { PageChrome, type BreadcrumbAncestor } from "./PageChrome";
 
 export interface CloudPanelProps {
   naming?: ZoneNamingInfo | null;
@@ -22,7 +22,9 @@ export interface CloudPanelProps {
   onSynced?: () => void;
   onBack: () => void;
   onHome?: () => void;
-  /** Cross-link to Heizplan › Protokoll (agent events; not the request log). */
+  /** Full breadcrumb parents (e.g. System). */
+  ancestors?: BreadcrumbAncestor[];
+  /** Jump to Protokoll with Kontingent/Cloud-Requests filter. */
   onOpenProtocol?: () => void;
 }
 
@@ -36,6 +38,7 @@ export function CloudPanel({
   onSynced,
   onBack,
   onHome,
+  ancestors,
   onOpenProtocol,
 }: CloudPanelProps) {
   const [limitDraft, setLimitDraft] = useState("");
@@ -61,7 +64,12 @@ export function CloudPanel({
 
   return (
     <div className="dash-panel">
-      <PageChrome current="Cloud & Quota" onBack={onBack} onHome={onHome} />
+      <PageChrome
+        current="Cloud & Kontingent"
+        ancestors={ancestors}
+        onBack={onBack}
+        onHome={onHome}
+      />
 
       <p className="settings__section-label">Raumnamen</p>
       <div className="settings-group settings-group--quota">
@@ -135,8 +143,9 @@ export function CloudPanel({
       <p className="settings__section-label">Cloud-Requests</p>
       <div className="settings-group settings-group--quota">
         <p className="settings__hint settings__hint--inline">
-          Jeder gezählte Cloud-HTTP-Call (+1 Quota). Automationen und Bedienung
-          stehen im Protokoll — hier nur die Request-Zählung.
+          Jeder gezählte Cloud-HTTP-Call (+1 Kontingent). Dieselbe Aktivität
+          erscheint auch im Protokoll unter der Kategorie „Kontingent“ — dort
+          mit Automationen und Bedienung zusammen.
         </p>
         {onOpenProtocol ? (
           <button
@@ -144,7 +153,7 @@ export function CloudPanel({
             className="protocol-panel__cloud-link"
             onClick={onOpenProtocol}
           >
-            Automations-Protokoll öffnen
+            Im Protokoll anzeigen (Kontingent, heute)
             <span aria-hidden="true">→</span>
           </button>
         ) : null}

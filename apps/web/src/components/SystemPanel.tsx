@@ -11,7 +11,7 @@ import {
   DisplayIcon,
   ProtocolIcon,
 } from "./icons";
-import { PageChrome } from "./PageChrome";
+import { PageChrome, type BreadcrumbAncestor } from "./PageChrome";
 
 export interface SystemPanelProps {
   health: HealthStatus | null;
@@ -23,6 +23,7 @@ export interface SystemPanelProps {
   onOpenProtocol: () => void;
   onBack: () => void;
   onHome?: () => void;
+  ancestors?: BreadcrumbAncestor[];
 }
 
 export function SystemPanel({
@@ -35,6 +36,7 @@ export function SystemPanel({
   onOpenProtocol,
   onBack,
   onHome,
+  ancestors,
 }: SystemPanelProps) {
   const bridgeMeta = health?.bridge.paired
     ? "Verbunden"
@@ -44,7 +46,12 @@ export function SystemPanel({
 
   return (
     <div className="dash-panel">
-      <PageChrome current="System" onBack={onBack} onHome={onHome} />
+      <PageChrome
+        current="System"
+        ancestors={ancestors}
+        onBack={onBack}
+        onHome={onHome}
+      />
 
       <p className="settings__section-label">Verbindung &amp; Protokoll</p>
       <div className="settings-group">

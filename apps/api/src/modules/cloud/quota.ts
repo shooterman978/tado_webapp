@@ -15,7 +15,7 @@ import type {
   CloudQuotaStatus,
 } from "@heizplan/shared";
 import { config } from "../../config.js";
-import { noteQuotaStatus } from "../protocol/trackers.js";
+import { noteCloudRequest, noteQuotaStatus } from "../protocol/trackers.js";
 
 const QUOTA_FILE = "cloud-quota.json";
 const LOG_FILE = "cloud-quota-log.json";
@@ -262,6 +262,16 @@ export async function consumeCloudQuota(
     );
   }
   const status = toStatus(file);
+  noteCloudRequest({
+    method: entry.method,
+    path: entry.path,
+    label: entry.label,
+    delta: entry.delta,
+    groupId: entry.groupId,
+    groupLabel: entry.groupLabel,
+    used: status.used,
+    limit: status.limit,
+  });
   noteQuotaStatus(status);
   return status;
 }

@@ -3,13 +3,14 @@
  * @package @heizplan/web
  */
 
-import { PageChrome } from "./PageChrome";
+import { PageChrome, type BreadcrumbAncestor } from "./PageChrome";
 
 export interface DisplayPanelProps {
   showHumidity: boolean;
   onShowHumidityChange: (value: boolean) => void;
   onBack: () => void;
   onHome?: () => void;
+  ancestors?: BreadcrumbAncestor[];
 }
 
 export function DisplayPanel({
@@ -17,10 +18,16 @@ export function DisplayPanel({
   onShowHumidityChange,
   onBack,
   onHome,
+  ancestors,
 }: DisplayPanelProps) {
   return (
     <div className="dash-panel">
-      <PageChrome current="Darstellung" onBack={onBack} onHome={onHome} />
+      <PageChrome
+        current="Darstellung"
+        ancestors={ancestors}
+        onBack={onBack}
+        onHome={onHome}
+      />
 
       <p className="settings__section-label">Anzeige</p>
       <div className="settings-group">

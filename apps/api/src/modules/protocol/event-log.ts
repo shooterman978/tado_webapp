@@ -8,13 +8,14 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import type {
+  CloudQuotaLogEntry,
   ProtocolEvent,
   ProtocolEventCategory,
   ProtocolEventsResponse,
   ProtocolEventType,
 } from "@heizplan/shared";
 import { config } from "../../config.js";
-import { berlinDayKey } from "../cloud/quota.js";
+import { berlinDayKey, getCloudQuotaLog } from "../cloud/quota.js";
 
 const LOG_FILE = "protocol-events.json";
 const MAX_LOG_ENTRIES = 400;
@@ -165,6 +166,40 @@ export function logProtocolEvent(input: ProtocolEventInput): void {
   void appendProtocolEvent(input);
 }
 
+/** Project a cloud-quota-log row into a protocol event (deep-link / Kontingent filter). */
+function cloudLogToProtocol(e: CloudQuotaLogEntry): ProtocolEvent {
+  const label = (e.groupLabel?.trim() || e.label || "Cloud-Anfrage").slice(0, 120);
+  const pathShort = (e.path.replace(/^\/api\/v2/, "") || e.path).slice(0, 200);
+  return {
+    id: `cq-${e.id}`,
+    at: e.at,
+    dayKey: e.dayKey,
+    category: "quota",
+    type: "quota.request",
+    message:
+      e.delta > 1
+        ? `Cloud-Request: ${label} (+${e.delta})`
+        : `Cloud-Request: ${label}`,
+    detail: {
+      method: e.method,
+      path: pathShort,
+      delta: e.delta,
+      label: e.label.slice(0, 120),
+      groupId: e.groupId ?? null,
+      groupLabel: e.groupLabel ?? null,
+      source: "cloud-quota-log",
+    },
+  };
+}
+
+function quotaRequestDedupeKey(e: ProtocolEvent): string {
+  if (e.type !== "quota.request") {
+    return e.id;
+  }
+  const d = e.detail ?? {};
+  return `${e.at}|${String(d.method ?? "")}|${String(d.path ?? "")}|${String(d.delta ?? 1)}`;
+}
+
 export async function getProtocolEvents(opts?: {
   category?: ProtocolEventCategory | "all";
   q?: string;
@@ -200,6 +235,37 @@ export async function getProtocolEvents(opts?: {
     entries = entries.filter((e) => Date.parse(e.at) <= untilMs);
   }
 
+  // Integrate existing cloud-quota-log into Kontingent (and Alle) views.
+  if (!category || category === "all" || category === "quota") {
+    try {
+      const cloud = await getCloudQuotaLog({
+        todayOnly,
+        limit: MAX_LOG_ENTRIES,
+      });
+      let cloudEntries = cloud.entries.map(cloudLogToProtocol);
+      if (Number.isFinite(sinceMs)) {
+        cloudEntries = cloudEntries.filter((e) => Date.parse(e.at) >= sinceMs);
+      }
+      if (Number.isFinite(untilMs)) {
+        cloudEntries = cloudEntries.filter((e) => Date.parse(e.at) <= untilMs);
+      }
+      const seen = new Set(entries.map(quotaRequestDedupeKey));
+      for (const row of cloudEntries) {
+        const key = quotaRequestDedupeKey(row);
+        if (seen.has(key)) {
+          continue;
+        }
+        seen.add(key);
+        entries.push(row);
+      }
+    } catch (err) {
+      console.warn(
+        "[protocol] cloud-quota-log merge failed:",
+        err instanceof Error ? err.message : err,
+      );
+    }
+  }
+
   const q = (opts?.q ?? "").trim().toLowerCase();
   if (q) {
     entries = entries.filter((e) => {
@@ -216,7 +282,7 @@ export async function getProtocolEvents(opts?: {
     });
   }
 
-  entries.reverse();
+  entries.sort((a, b) => Date.parse(b.at) - Date.parse(a.at));
   entries = entries.slice(0, limit);
 
   return {

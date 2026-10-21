@@ -10,12 +10,19 @@ import type {
   ProtocolEventsResponse,
 } from "@heizplan/shared";
 import { fetchProtocolEvents, postProtocolClientEvent } from "../api";
-import { PageChrome } from "./PageChrome";
+import { PageChrome, type BreadcrumbAncestor } from "./PageChrome";
+
+export type ProtocolRangePreset = "today" | "24h" | "7d" | "all";
 
 export interface ProtocolPanelProps {
   onBack: () => void;
   onHome?: () => void;
-  /** Open Cloud & Quota for the detailed request log (no duplicate UX). */
+  ancestors?: BreadcrumbAncestor[];
+  /** Deep-link: start with category chip (e.g. quota from Cloud & Kontingent). */
+  initialCategory?: ProtocolEventCategory | "all";
+  /** Deep-link: start with time range (default today). */
+  initialRange?: ProtocolRangePreset;
+  /** Open Cloud & Kontingent for the detailed request log. */
   onOpenCloud?: () => void;
 }
 
@@ -47,8 +54,6 @@ const FILTER_CHIPS: Array<ProtocolEventCategory | "all"> = [
   "feedback",
   "polling",
 ];
-
-type RangePreset = "today" | "24h" | "7d" | "all";
 
 function formatWhen(iso: string): string {
   try {
@@ -93,7 +98,7 @@ function categoryTone(cat: ProtocolEventCategory): string {
   }
 }
 
-function rangeBounds(preset: RangePreset): {
+function rangeBounds(preset: ProtocolRangePreset): {
   todayOnly: boolean;
   since?: string;
 } {
@@ -113,10 +118,15 @@ function rangeBounds(preset: RangePreset): {
 export function ProtocolPanel({
   onBack,
   onHome,
+  ancestors,
+  initialCategory = "all",
+  initialRange = "today",
   onOpenCloud,
 }: ProtocolPanelProps) {
-  const [category, setCategory] = useState<ProtocolEventCategory | "all">("all");
-  const [range, setRange] = useState<RangePreset>("today");
+  const [category, setCategory] = useState<ProtocolEventCategory | "all">(
+    initialCategory,
+  );
+  const [range, setRange] = useState<ProtocolRangePreset>(initialRange);
   const [search, setSearch] = useState("");
   const [searchDraft, setSearchDraft] = useState("");
   const [data, setData] = useState<ProtocolEventsResponse | null>(null);
@@ -175,11 +185,17 @@ export function ProtocolPanel({
 
   return (
     <div className="dash-panel protocol-panel">
-      <PageChrome current="Protokoll" onBack={onBack} onHome={onHome} />
+      <PageChrome
+        current="Protokoll"
+        ancestors={ancestors}
+        onBack={onBack}
+        onHome={onHome}
+      />
 
       <p className="settings__hint settings__hint--inline">
-        Was die Automationen und die App getan haben — ohne Secrets. Detaillierte
-        Cloud-Request-Zählung bleibt unter Cloud &amp; Quota.
+        Was die Automationen und die App getan haben — ohne Secrets. Cloud-Requests
+        und Kontingent-Warnungen stehen unter der Kategorie „Kontingent“; die
+        Detail-Zählung bleibt unter Cloud &amp; Kontingent.
       </p>
 
       {onOpenCloud ? (
@@ -188,7 +204,7 @@ export function ProtocolPanel({
           className="protocol-panel__cloud-link"
           onClick={onOpenCloud}
         >
-          Cloud-Request-Log öffnen
+          Cloud &amp; Kontingent öffnen
           <span aria-hidden="true">→</span>
         </button>
       ) : null}

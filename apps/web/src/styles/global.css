@@ -92,6 +92,11 @@ input {
   list-style: none;
   min-width: 0;
   flex: 1;
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+  overscroll-behavior-x: contain;
 }
 
 .page-chrome__crumb {
@@ -104,7 +109,7 @@ input {
   color: var(--ink-muted);
 }
 
-.page-chrome__crumb--root {
+.page-chrome__crumb--nav {
   flex-shrink: 0;
 }
 
@@ -125,6 +130,7 @@ input {
   font: inherit;
   font-weight: 600;
   cursor: pointer;
+  white-space: nowrap;
 }
 
 .page-chrome__crumb--current {
@@ -133,14 +139,13 @@ input {
   font-size: 1.15rem;
   font-weight: 700;
   letter-spacing: -0.02em;
-  min-width: 0;
-  flex: 1;
+  /* Prefer horizontal scroll over truncating mid-path segments. */
+  flex: 0 0 auto;
+  max-width: none;
 }
 
 .page-chrome__current {
   display: block;
-  overflow: hidden;
-  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
@@ -2128,6 +2133,13 @@ input {
 .cal-wiz__step-pill {
   min-width: 2.2rem;
   text-align: right;
+  font-size: 0.75rem;
+  color: var(--ink-muted, #9a9a9a);
+}
+
+.cal-wiz__step-meta {
+  margin: -0.5rem 0 0.75rem;
+  padding: 0 0.15rem;
   font-size: 0.75rem;
   color: var(--ink-muted, #9a9a9a);
 }

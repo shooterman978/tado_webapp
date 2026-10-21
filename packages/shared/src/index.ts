@@ -740,6 +740,8 @@ export type ProtocolEventType =
   | "presence.changed"
   | "quota.near_limit"
   | "quota.blocked"
+  /** Mirrored from cloud-quota-log — each counted Cloud HTTP call. */
+  | "quota.request"
   | "window.open"
   | "window.closed"
   | "window.auto_off"

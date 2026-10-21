@@ -27,9 +27,8 @@ import {
   saveCalendarConnection,
   saveCalendarEventSelection,
 } from "../api";
-import { BackIcon } from "./icons";
 import { CalendarConnectionPanel } from "./CalendarConnectionPanel";
-import { PageChrome } from "./PageChrome";
+import { PageChrome, type BreadcrumbAncestor } from "./PageChrome";
 
 interface CalendarRulesScreenProps {
   zones: Zone[];
@@ -40,6 +39,8 @@ interface CalendarRulesScreenProps {
   breadcrumbRoot?: string;
   /** Jump to dashboard root (breadcrumb). */
   onHome?: () => void;
+  /** Extra parents between root and Termine (usually none). */
+  ancestors?: BreadcrumbAncestor[];
 }
 
 type WizardStep =
@@ -222,6 +223,7 @@ export function CalendarRulesScreen({
   focusRoomId,
   breadcrumbRoot = "Heizplan",
   onHome,
+  ancestors = [],
 }: CalendarRulesScreenProps) {
   const [step, setStep] = useState<WizardStep>("overview");
   const [status, setStatus] = useState<CalendarStatusResponse | null>(null);
@@ -595,31 +597,31 @@ export function CalendarRulesScreen({
 
   const presence = status?.presence;
 
+  const crumbAncestors: BreadcrumbAncestor[] =
+    step === "overview"
+      ? ancestors
+      : [
+          ...ancestors,
+          {
+            label: "Termine & Heizung",
+            onNavigate: () => setStep("overview"),
+          },
+        ];
+
   return (
     <div className="cal-wiz">
-      {step === "overview" || step === "advanced" ? (
-        <PageChrome
-          current={headerTitle}
-          rootLabel={breadcrumbRoot}
-          onBack={step === "overview" ? onBack : stepBack}
-          onHome={onHome ?? onBack}
-        />
-      ) : (
-        <header className="schedule__bar">
-          <button
-            type="button"
-            className="icon-btn-ghost"
-            onClick={stepBack}
-            aria-label="Zurück"
-          >
-            <BackIcon />
-          </button>
-          <h1>{headerTitle}</h1>
-          <span className="cal-wiz__step-pill" aria-hidden="true">
-            {stepPill}
-          </span>
-        </header>
-      )}
+      <PageChrome
+        current={headerTitle}
+        rootLabel={breadcrumbRoot}
+        ancestors={crumbAncestors}
+        onBack={step === "overview" ? onBack : stepBack}
+        onHome={onHome ?? onBack}
+      />
+      {stepPill ? (
+        <p className="cal-wiz__step-meta" aria-hidden="true">
+          Schritt {stepPill}
+        </p>
+      ) : null}
 
       {error ? (
         <p className="error-state" role="alert">
