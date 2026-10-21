@@ -323,6 +323,7 @@ export async function listZones(): Promise<ZonesResponse> {
       category: "polling",
       type: "polling.zones",
       message: "Räume aktualisiert",
+      actor: { kind: "poll", label: "Hintergrund" },
       detail: {
         paired: status.paired,
         state: status.state,

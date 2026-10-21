@@ -150,10 +150,19 @@ export async function reconcileOverrides(
         type: "calendar.override_clear",
         message: `Termin-Override beendet${prev.ruleName ? `: ${prev.ruleName}` : ""}`,
         roomId: prev.roomId,
+        actor: {
+          kind: "calendar",
+          label: prev.ruleName
+            ? `Kalenderregel ${prev.ruleName}`.slice(0, 80)
+            : "Kalenderregel",
+        },
         detail: {
           ruleId: prev.ruleId,
           ruleName: prev.ruleName,
           eventUid: prev.eventUid,
+          eventSummary: prev.eventSummary ?? null,
+          mode: prev.mode ?? null,
+          targetTempC: prev.targetTempC ?? null,
         },
       });
     } catch (err) {
@@ -200,10 +209,15 @@ export async function reconcileOverrides(
         type: "calendar.override_apply",
         message: `Termin-Override aktiv: ${action.rule.name}`,
         roomId,
+        actor: {
+          kind: "calendar",
+          label: `Kalenderregel ${action.rule.name}`.slice(0, 80),
+        },
         detail: {
           ruleId: action.rule.id,
           ruleName: action.rule.name,
           eventUid: action.event.uid,
+          eventSummary: action.event.summary ?? null,
           mode: record.mode,
           targetTempC: record.targetTempC ?? null,
         },

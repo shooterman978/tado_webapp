@@ -52,9 +52,11 @@ export async function observeAllZonesHeatup(
           type: "heatup.accept",
           message: "Heat-up-Sample übernommen",
           roomId: zone.id,
+          actor: { kind: "heatup", label: "Vorwärmen" },
           detail: {
             sampleId: result.sampleId ?? null,
             okSampleCount: state.okSampleCount,
+            rateEmaCPerMin: state.rateEmaCPerMin ?? null,
           },
         });
       } else if (result.action === "rejected") {
@@ -66,6 +68,7 @@ export async function observeAllZonesHeatup(
           type: "heatup.reject",
           message: `Heat-up-Sample verworfen (${result.reason ?? "?"})`,
           roomId: zone.id,
+          actor: { kind: "heatup", label: "Vorwärmen" },
           detail: {
             sampleId: result.sampleId ?? null,
             reason: result.reason ?? null,
@@ -78,6 +81,8 @@ export async function observeAllZonesHeatup(
           type: "heatup.started",
           message: "Heat-up-Messung gestartet",
           roomId: zone.id,
+          actor: { kind: "heatup", label: "Vorwärmen" },
+          detail: { action: "started" },
         });
       }
     } catch (err) {

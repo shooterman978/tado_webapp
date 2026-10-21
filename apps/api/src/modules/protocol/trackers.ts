@@ -36,6 +36,7 @@ export function noteBridgeStatus(paired: boolean, message?: string): void {
       category: "bridge",
       type: "bridge.disconnect",
       message: "Bridge-Verbindung verloren",
+      actor: { kind: "bridge", label: "Bridge" },
       detail: { message: message ?? null },
     });
   } else if (!lastBridgePaired && paired) {
@@ -43,6 +44,7 @@ export function noteBridgeStatus(paired: boolean, message?: string): void {
       category: "bridge",
       type: "bridge.reconnect",
       message: "Bridge wieder verbunden",
+      actor: { kind: "bridge", label: "Bridge" },
       detail: { message: message ?? null },
     });
     lastBridgeErrorMsg = null;
@@ -60,6 +62,7 @@ export function noteBridgeError(message: string): void {
     category: "bridge",
     type: "bridge.error",
     message: "Bridge-Fehler",
+    actor: { kind: "bridge", label: "Bridge" },
     detail: { message: clipped },
   });
 }
@@ -78,6 +81,7 @@ export function notePresenceMode(
         category: "presence",
         type: mode === "home" ? "presence.home" : "presence.away",
         message: mode === "home" ? "Zuhause erkannt" : "Unterwegs erkannt",
+        actor: { kind: "presence", label: "Geofencing" },
         detail: { mode, initial: true },
       });
     }
@@ -95,12 +99,14 @@ export function notePresenceMode(
       mode === "home"
         ? "Presence: Unterwegs → Zuhause"
         : "Presence: Zuhause → Unterwegs",
+    actor: { kind: "presence", label: "Geofencing" },
     detail: { from, to: mode },
   });
   logProtocolEvent({
     category: "presence",
     type: mode === "home" ? "presence.home" : "presence.away",
     message: mode === "home" ? "Zuhause" : "Unterwegs",
+    actor: { kind: "presence", label: "Geofencing" },
     detail: { from },
   });
 }
@@ -111,6 +117,7 @@ export function noteQuotaStatus(status: CloudQuotaStatus): void {
       category: "quota",
       type: "quota.blocked",
       message: `Cloud-Kontingent erschöpft (${status.used}/${status.limit})`,
+      actor: { kind: "cloud", label: "Cloud" },
       detail: {
         used: status.used,
         limit: status.limit,
@@ -127,6 +134,7 @@ export function noteQuotaStatus(status: CloudQuotaStatus): void {
       category: "quota",
       type: "quota.near_limit",
       message: `Cloud-Kontingent nahe Limit (${status.remaining} übrig)`,
+      actor: { kind: "cloud", label: "Cloud" },
       detail: {
         used: status.used,
         limit: status.limit,
@@ -165,6 +173,10 @@ export function noteCloudRequest(meta: {
       meta.delta > 1
         ? `Cloud-Request: ${label} (+${meta.delta})`
         : `Cloud-Request: ${label}`,
+    actor: {
+      kind: "cloud",
+      label: (meta.groupLabel?.trim() || "Cloud").slice(0, 80),
+    },
     detail: {
       method: meta.method,
       path: pathShort.slice(0, 200),
@@ -193,7 +205,8 @@ export function noteWindowState(
     type: open ? "window.open" : "window.closed",
     message: open ? "Fenster offen erkannt" : "Fenster geschlossen",
     roomId,
-    detail: { source: source ?? null },
+    actor: { kind: "window", label: "Fensterregel" },
+    detail: { source: source ?? null, open },
   });
 }
 

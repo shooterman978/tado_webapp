@@ -6,13 +6,16 @@
 
 import { Hono } from "hono";
 import type {
+  ProtocolActorKind,
   ProtocolEventCategory,
   ProtocolEventType,
 } from "@heizplan/shared";
 import {
+  ALL_ACTORS,
   ALL_CATEGORIES,
   appendProtocolEvent,
   getProtocolEvents,
+  PROTOCOL_ACTORS,
   PROTOCOL_CATEGORIES,
 } from "../modules/protocol/event-log.js";
 
@@ -37,6 +40,11 @@ protocolRoutes.get("/events", async (c) => {
     (PROTOCOL_CATEGORIES as string[]).includes(categoryRaw)
       ? (categoryRaw as ProtocolEventCategory | "all")
       : "all";
+  const actorRaw = c.req.query("actor") ?? "all";
+  const actor =
+    actorRaw === "all" || (PROTOCOL_ACTORS as string[]).includes(actorRaw)
+      ? (actorRaw as ProtocolActorKind | "all")
+      : "all";
   const q = c.req.query("q") ?? undefined;
   const since = c.req.query("since") ?? undefined;
   const until = c.req.query("until") ?? undefined;
@@ -45,6 +53,7 @@ protocolRoutes.get("/events", async (c) => {
   const limit = limitRaw ? Number(limitRaw) : undefined;
   const payload = await getProtocolEvents({
     category,
+    actor,
     q,
     since,
     until,
@@ -55,7 +64,7 @@ protocolRoutes.get("/events", async (c) => {
 });
 
 protocolRoutes.get("/categories", (c) => {
-  return c.json({ categories: ALL_CATEGORIES });
+  return c.json({ categories: ALL_CATEGORIES, actors: ALL_ACTORS });
 });
 
 /**
@@ -97,6 +106,10 @@ protocolRoutes.post("/events", async (c) => {
       type,
       message: body.message,
       roomId: body.roomId ?? null,
+      actor:
+        category === "user"
+          ? { kind: "user", label: "Du" }
+          : { kind: "system", label: "System" },
       detail: body.detail ?? null,
     });
     return c.json({ ok: true, entry });

@@ -2735,14 +2735,21 @@ input {
 .protocol-row__top {
   display: flex;
   align-items: baseline;
-  justify-content: space-between;
-  gap: 0.5rem;
+  flex-wrap: wrap;
+  gap: 0.35rem 0.55rem;
 }
 
 .protocol-row__time {
   font-size: 0.72rem;
   color: var(--ink-muted);
   font-variant-numeric: tabular-nums;
+}
+
+.protocol-row__actor {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--ink);
+  margin-right: auto;
 }
 
 .protocol-row__cat {
@@ -2759,13 +2766,19 @@ input {
   line-height: 1.25;
 }
 
+.protocol-row__detail,
 .protocol-row__meta {
-  margin: 0.15rem 0 0;
+  margin: 0.2rem 0 0;
   font-size: 0.7rem;
   color: var(--ink-dim);
+  line-height: 1.35;
   overflow: hidden;
   text-overflow: ellipsis;
-  white-space: nowrap;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  white-space: normal;
+  word-break: break-word;
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -45,6 +45,7 @@ zonesRoutes.put("/settings/open-window", async (c) => {
       category: "user",
       type: "user.settings",
       message: "Fenster-Einstellungen geändert",
+      actor: { kind: "user", label: "Du" },
       detail: {
         detectionEnabled: settings.detectionEnabled ?? null,
         globalAutoOff: settings.globalAutoOff ?? null,
@@ -58,6 +59,7 @@ zonesRoutes.put("/settings/open-window", async (c) => {
       category: "feedback",
       type: "feedback.error",
       message: "Fenster-Einstellungen speichern fehlgeschlagen",
+      actor: { kind: "user", label: "Du" },
       detail: { message },
     });
     return c.json({ error: "invalid_settings", message }, 400);
@@ -84,6 +86,7 @@ zonesRoutes.post("/quick-actions/:action", async (c) => {
       category: "user",
       type: "user.quick_action",
       message: `Schnellaktion: ${action}`,
+      actor: { kind: "user", label: "Du" },
       detail: { action },
     });
     return c.json({ ok: true, action });
@@ -93,6 +96,7 @@ zonesRoutes.post("/quick-actions/:action", async (c) => {
       category: "feedback",
       type: "feedback.error",
       message: "Schnellaktion fehlgeschlagen",
+      actor: { kind: "user", label: "Du" },
       detail: { action, message },
     });
     const status = message.includes("not paired") ? 409 : 502;
@@ -129,6 +133,7 @@ zonesRoutes.post("/:zoneId/temperature", async (c) => {
       type: "user.setpoint",
       message: `Solltemperatur ${tempC.toFixed(1)} °C`,
       roomId: zoneId,
+      actor: { kind: "user", label: "Du" },
       detail: {
         tempC,
         durationMinutes: durationMinutes ?? null,
@@ -143,6 +148,7 @@ zonesRoutes.post("/:zoneId/temperature", async (c) => {
       type: "feedback.error",
       message: "Solltemperatur setzen fehlgeschlagen",
       roomId: zoneId,
+      actor: { kind: "user", label: "Du" },
       detail: { message },
     });
     const status = message.includes("not paired") ? 409 : 502;
@@ -160,6 +166,8 @@ zonesRoutes.post("/:zoneId/overlay/clear", async (c) => {
       type: "user.resume_schedule",
       message: "Zeitplan fortgesetzt",
       roomId: zoneId,
+      actor: { kind: "user", label: "Du" },
+      detail: { action: "resume_schedule" },
     });
     return c.json({ ok: true, zoneId });
   } catch (err) {
@@ -169,6 +177,7 @@ zonesRoutes.post("/:zoneId/overlay/clear", async (c) => {
       type: "feedback.error",
       message: "Zeitplan fortsetzen fehlgeschlagen",
       roomId: zoneId,
+      actor: { kind: "user", label: "Du" },
       detail: { message },
     });
     const status = message.includes("not paired") ? 409 : 502;
@@ -200,6 +209,7 @@ zonesRoutes.post("/:zoneId/power", async (c) => {
       type: "user.power",
       message: mode === "off" ? "Heizung aus" : "Heizung an",
       roomId: zoneId,
+      actor: { kind: "user", label: "Du" },
       detail: { mode },
     });
     return c.json({ ok: true, zoneId, mode });
@@ -210,6 +220,7 @@ zonesRoutes.post("/:zoneId/power", async (c) => {
       type: "feedback.error",
       message: "Heizung schalten fehlgeschlagen",
       roomId: zoneId,
+      actor: { kind: "user", label: "Du" },
       detail: { mode, message },
     });
     const status = message.includes("not paired") ? 409 : 502;

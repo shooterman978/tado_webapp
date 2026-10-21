@@ -181,7 +181,13 @@ export async function syncZoneScheduleFromCloud(roomId: string): Promise<{
       type: "schedule.sync",
       message: `Zeitplan synchronisiert${zoneName ? `: ${zoneName}` : ""}`,
       roomId,
-      detail: { roomKey, cloudZoneId, zoneName: zoneName ?? null },
+      actor: { kind: "cloud", label: "Cloud-Sync" },
+      detail: {
+        roomKey,
+        cloudZoneId,
+        zoneName: zoneName ?? null,
+        roomName: zoneName ?? null,
+      },
     });
     return { schedule, quota: await getCloudQuota(), fromCache: false as const };
   });

@@ -756,6 +756,27 @@ export type ProtocolEventType =
   | "bridge.error"
   | "system.info";
 
+/**
+ * Who / what caused the event — additive, back-compat (old rows infer on read).
+ * Labels are German / everyday (“Du”, “Kalenderregel …”, “System”).
+ */
+export type ProtocolActorKind =
+  | "user"
+  | "calendar"
+  | "window"
+  | "heatup"
+  | "presence"
+  | "cloud"
+  | "bridge"
+  | "poll"
+  | "system";
+
+export interface ProtocolActor {
+  kind: ProtocolActorKind;
+  /** Short German label for the list (e.g. "Du", "Kalenderregel", "Cloud"). */
+  label: string;
+}
+
 /** One protocol ring-buffer entry (persisted under bridge data). */
 export interface ProtocolEvent {
   id: string;
@@ -769,8 +790,14 @@ export interface ProtocolEvent {
   message: string;
   roomId?: string | null;
   /**
+   * Who/what triggered the event. Optional on disk for older rows;
+   * readers should fill via inference when missing.
+   */
+  actor?: ProtocolActor | null;
+  /**
    * Optional safe detail bag (strings/numbers/bools only).
    * Never include tokens, PINs, passwords, or full URLs with query secrets.
+   * Prefer keys like method, path, delta, ruleName, mode, targetTempC.
    */
   detail?: Record<string, string | number | boolean | null> | null;
 }
@@ -778,6 +805,8 @@ export interface ProtocolEvent {
 export interface ProtocolEventsQuery {
   /** Filter by category (omit / "all" = no filter). */
   category?: ProtocolEventCategory | "all";
+  /** Filter by actor kind (omit / "all" = no filter). */
+  actor?: ProtocolActorKind | "all";
   /** Substring match on message + type (case-insensitive). */
   q?: string;
   /** ISO lower bound (inclusive). */
@@ -797,4 +826,6 @@ export interface ProtocolEventsResponse {
   dayKey: string;
   todayOnly: boolean;
   categories: ProtocolEventCategory[];
+  /** Actor kinds available for filter chips. */
+  actors: ProtocolActorKind[];
 }

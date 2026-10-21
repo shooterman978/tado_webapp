@@ -78,6 +78,7 @@ if (config.calendarPollMs > 0) {
           category: "polling",
           type: "polling.calendar",
           message: "Kalender geprüft (Änderungen)",
+          actor: { kind: "poll", label: "Kalender-Abfrage" },
           detail: {
             matched: result.matched,
             applied: result.applied,
@@ -94,6 +95,7 @@ if (config.calendarPollMs > 0) {
         category: "feedback",
         type: "feedback.error",
         message: "Kalender-Poll fehlgeschlagen",
+        actor: { kind: "system", label: "System" },
         detail: { message: message.slice(0, 200) },
       });
     }

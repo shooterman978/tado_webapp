@@ -16,6 +16,7 @@ import type {
   HeatupPrediction,
   HeatupRoomSummary,
   OpenWindowSettings,
+  ProtocolActorKind,
   ProtocolEvent,
   ProtocolEventCategory,
   ProtocolEventsResponse,
@@ -390,6 +391,7 @@ export function fetchHeatupPrediction(
 
 export function fetchProtocolEvents(opts?: {
   category?: ProtocolEventCategory | "all";
+  actor?: ProtocolActorKind | "all";
   q?: string;
   since?: string;
   until?: string;
@@ -399,6 +401,9 @@ export function fetchProtocolEvents(opts?: {
   const params = new URLSearchParams();
   if (opts?.category && opts.category !== "all") {
     params.set("category", opts.category);
+  }
+  if (opts?.actor && opts.actor !== "all") {
+    params.set("actor", opts.actor);
   }
   if (opts?.q) {
     params.set("q", opts.q);

@@ -214,6 +214,7 @@ export async function runHomeCloudSync(): Promise<{
       category: "schedule",
       type: "schedule.home_sync",
       message: "Home Cloud-Sync abgeschlossen",
+      actor: { kind: "cloud", label: "Cloud-Sync" },
       detail: {
         openWindowCount,
         homeName: meta.homeName ?? null,

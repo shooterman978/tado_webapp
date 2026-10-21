@@ -8,7 +8,6 @@ import type { CloudQuotaStatus, ZoneNamingInfo } from "@heizplan/shared";
 import { fetchCloudQuota, saveCloudQuotaLimit } from "../api";
 import { CloudLinkPanel } from "./CloudLinkPanel";
 import { CloudQuotaBadge, formatQuotaLabel } from "./CloudQuotaBadge";
-import { CloudRequestLog } from "./CloudRequestLog";
 import { HomeCloudSync } from "./HomeCloudSync";
 import { PageChrome, type BreadcrumbAncestor } from "./PageChrome";
 
@@ -143,10 +142,16 @@ export function CloudPanel({
       <p className="settings__section-label">Cloud-Requests</p>
       <div className="settings-group settings-group--quota">
         <p className="settings__hint settings__hint--inline">
-          Jeder gezählte Cloud-HTTP-Call (+1 Kontingent). Dieselbe Aktivität
-          erscheint auch im Protokoll unter der Kategorie „Kontingent“ — dort
-          mit Automationen und Bedienung zusammen.
+          Jeder gezählte Cloud-HTTP-Call (+1 Kontingent) steht im Protokoll unter
+          „Kontingent“ — mit Akteur, Methode/Pfad und Ergebnis, zusammen mit
+          Automationen und Bedienung. Hier nur Kurzinfo und Kontingent.
         </p>
+        {quota ? (
+          <p className="settings-row__meta settings-quota-line">
+            Heute {quota.used}/{quota.limit}
+            {quota.remaining != null ? ` · ${quota.remaining} übrig` : ""}
+          </p>
+        ) : null}
         {onOpenProtocol ? (
           <button
             type="button"
@@ -157,7 +162,6 @@ export function CloudPanel({
             <span aria-hidden="true">→</span>
           </button>
         ) : null}
-        <CloudRequestLog />
       </div>
     </div>
   );

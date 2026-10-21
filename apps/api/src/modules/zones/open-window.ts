@@ -195,7 +195,11 @@ export async function processOpenWindowAutoOff(
             type: "window.auto_off",
             message: "Fenster-Auto-Aus aktiv",
             roomId: zone.id,
-            detail: { resumeMode: settings.resumeMode },
+            actor: { kind: "window", label: "Fensterregel" },
+            detail: {
+              resumeMode: settings.resumeMode,
+              roomName: zone.name ?? null,
+            },
           });
         } catch (err) {
           await clearAutoOffSnapshot(dataDir(), zone.id);
@@ -227,7 +231,12 @@ export async function processOpenWindowAutoOff(
           type: "window.resume",
           message: "Heizung nach Fenster wieder an",
           roomId: zone.id,
-          detail: { resumeMode: settings.resumeMode },
+          actor: { kind: "window", label: "Fensterregel" },
+          detail: {
+            resumeMode: settings.resumeMode,
+            roomName: zone.name ?? null,
+            previousTargetTempC: snapshot.previousTargetTempC ?? null,
+          },
         });
       } catch (err) {
         console.warn(
