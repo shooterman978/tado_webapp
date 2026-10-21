@@ -12,6 +12,11 @@ import { ApiError, fetchCloudSyncStatus, syncCloudHome } from "../api";
 interface HomeCloudSyncProps {
   onSynced?: () => void;
   onQuotaChange?: (quota: CloudQuotaStatus) => void;
+  /**
+   * `card` — visible sync UI (Cloud drill-in).
+   * `silent` — auto-sync only, no dashboard chrome (keeps quota fresh without hero clutter).
+   */
+  variant?: "card" | "silent";
 }
 
 function formatSyncedAt(iso: string | null): string {
@@ -30,7 +35,11 @@ function formatSyncedAt(iso: string | null): string {
   });
 }
 
-export function HomeCloudSync({ onSynced, onQuotaChange }: HomeCloudSyncProps) {
+export function HomeCloudSync({
+  onSynced,
+  onQuotaChange,
+  variant = "card",
+}: HomeCloudSyncProps) {
   const [sync, setSync] = useState<CloudSyncStatus | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -91,6 +100,10 @@ export function HomeCloudSync({ onSynced, onQuotaChange }: HomeCloudSyncProps) {
     // Intentionally once on mount — auto-sync is a clear, infrequent trigger.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  if (variant === "silent") {
+    return null;
+  }
 
   if (sync && !sync.linked) {
     return null;

@@ -148,8 +148,33 @@ input {
   min-height: 100%;
 }
 
-.dash-system {
-  margin: 1.15rem 0 1.25rem;
+.dash-more {
+  margin: 1.1rem 0 0.35rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+
+.dash-more__system {
+  border-radius: var(--radius);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  margin: 0;
+  min-height: 3.5rem;
+}
+
+.dash-more__system:active {
+  transform: scale(0.99);
+}
+
+.dash-more__system .settings-row__chev {
+  margin-left: auto;
+}
+
+.callout--compact {
+  margin-top: 0.75rem;
+  margin-bottom: 0;
 }
 
 .bridge-status__title--btn {
@@ -172,7 +197,7 @@ input {
 /* —— Automation home (Tado dark cards) —— */
 
 .auto-home {
-  margin: 0 0 1rem;
+  margin: 0.15rem 0 0;
 }
 
 .auto-home__label {
@@ -263,15 +288,8 @@ input {
   color: var(--accent-teal);
 }
 
-.auto-home__note {
-  margin: 0.65rem 0 0;
-  font-size: 0.78rem;
-  color: var(--ink-dim);
-  line-height: 1.35;
-}
-
 .home-rooms {
-  margin: 0.85rem 0 1rem;
+  margin: 0;
   border-radius: var(--radius);
   background: var(--surface);
   border: 1px solid var(--line);
@@ -341,6 +359,11 @@ input {
   font-weight: 600;
   cursor: pointer;
   animation: rise 0.45s var(--ease) both;
+}
+
+/* Below automations — does not compete with the 2×2 hero */
+.promo-banner--after-auto {
+  margin: 0.75rem 0 0;
 }
 
 .promo-banner__badge {
@@ -1537,11 +1560,15 @@ input {
 }
 
 .home-sync {
-  margin: 0.5rem 1rem 0.75rem;
+  margin: 0.5rem 0 0.75rem;
   padding: 0.7rem 0.85rem;
   border-radius: 0.85rem;
   background: rgba(255, 255, 255, 0.06);
   border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.settings-group--quota .home-sync {
+  margin: 0.65rem 0.85rem 0.35rem;
 }
 
 .home-sync__row {
@@ -1810,12 +1837,6 @@ input {
   margin: 0.35rem 0 1rem;
 }
 
-.dash-skeleton__promo {
-  height: 2.1rem;
-  border-radius: 999px;
-  margin-bottom: 0.75rem;
-}
-
 .dash-skeleton__title {
   height: 1.7rem;
   width: 42%;
@@ -1827,6 +1848,12 @@ input {
   height: 1.85rem;
   border-radius: 0.65rem;
   margin-bottom: 0.85rem;
+}
+
+.dash-skeleton__more {
+  height: 3.4rem;
+  border-radius: var(--radius);
+  margin-top: 1.1rem;
 }
 
 .skel {

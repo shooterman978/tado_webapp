@@ -9,6 +9,7 @@ import { fetchCloudQuota, saveCloudQuotaLimit } from "../api";
 import { CloudLinkPanel } from "./CloudLinkPanel";
 import { CloudQuotaBadge, formatQuotaLabel } from "./CloudQuotaBadge";
 import { CloudRequestLog } from "./CloudRequestLog";
+import { HomeCloudSync } from "./HomeCloudSync";
 import { PageChrome } from "./PageChrome";
 
 export interface CloudPanelProps {
@@ -18,6 +19,7 @@ export interface CloudPanelProps {
   quotaUnavailable?: string | null;
   onQuotaChange: (quota: CloudQuotaStatus) => void;
   onLinked?: () => void;
+  onSynced?: () => void;
   onBack: () => void;
   onHome?: () => void;
   /** Cross-link to Heizplan › Protokoll (agent events; not the request log). */
@@ -31,6 +33,7 @@ export function CloudPanel({
   quotaUnavailable = null,
   onQuotaChange,
   onLinked,
+  onSynced,
   onBack,
   onHome,
   onOpenProtocol,
@@ -65,8 +68,9 @@ export function CloudPanel({
         <CloudLinkPanel naming={naming} onLinked={onLinked} />
       </div>
 
-      <p className="settings__section-label">Tages-Quota</p>
+      <p className="settings__section-label">Sync &amp; Tageskontingent</p>
       <div className="settings-group settings-group--quota">
+        <HomeCloudSync onSynced={onSynced} onQuotaChange={onQuotaChange} />
         <CloudQuotaBadge
           quota={quota}
           loading={quotaLoading}

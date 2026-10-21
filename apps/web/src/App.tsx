@@ -25,7 +25,6 @@ import { BridgeStatus } from "./components/BridgeStatus";
 import { CalendarRulesScreen } from "./components/CalendarRulesScreen";
 import { CloudLinkPanel } from "./components/CloudLinkPanel";
 import { CloudPanel } from "./components/CloudPanel";
-import { CloudQuotaBadge } from "./components/CloudQuotaBadge";
 import { DashboardSkeleton } from "./components/DashboardSkeleton";
 import { DisplayPanel } from "./components/DisplayPanel";
 import { EmptyState } from "./components/EmptyState";
@@ -36,31 +35,29 @@ import { ProtocolPanel } from "./components/ProtocolPanel";
 import { RoomDetail } from "./components/RoomDetail";
 import { RoomGrid } from "./components/RoomGrid";
 import { ScheduleScreen } from "./components/ScheduleScreen";
-import {
-  BridgeIcon,
-  ChevronIcon,
-  CloudIcon,
-  DisplayIcon,
-  ProtocolIcon,
-  RetryIcon,
-  WarmupIcon,
-} from "./components/icons";
+import { SystemPanel } from "./components/SystemPanel";
+import { ChevronIcon, RetryIcon, SlidersIcon, WarmupIcon } from "./components/icons";
 
 const POLL_MS = 15_000;
 const HUMIDITY_KEY = "heizplan.showHumidity";
 const HOME_NAME_KEY = "heizplan.homeName";
 
+/** Drill-ins that can open from dashboard or from the System hub. */
+type SystemVia = "dashboard" | "system";
+
 /**
  * Navigation model — one dashboard root + breadcrumb drill-ins.
+ * Automations first; System/Cloud/Quota live behind a single hub.
  */
 type AppView =
   | { kind: "dashboard" }
   | { kind: "windows" }
-  | { kind: "cloud" }
-  | { kind: "bridge" }
+  | { kind: "system" }
+  | { kind: "cloud"; via?: SystemVia }
+  | { kind: "bridge"; via?: SystemVia }
   | { kind: "geofencing" }
-  | { kind: "display" }
-  | { kind: "protocol" }
+  | { kind: "display"; via?: SystemVia }
+  | { kind: "protocol"; via?: SystemVia }
   | { kind: "calendar-rules"; zoneId?: string }
   | { kind: "room"; zoneId: string }
   | { kind: "schedule"; zoneId: string };
@@ -106,6 +103,15 @@ export function App() {
   );
 
   const goDashboard = useCallback(() => setView({ kind: "dashboard" }), []);
+  const goSystem = useCallback(() => setView({ kind: "system" }), []);
+
+  function backFromSystemChild(via?: SystemVia): void {
+    if (via === "system") {
+      goSystem();
+    } else {
+      goDashboard();
+    }
+  }
 
   const load = useCallback(async (opts?: { quiet?: boolean }) => {
     if (!opts?.quiet) {
@@ -365,6 +371,24 @@ export function App() {
     );
   }
 
+  if (view.kind === "system") {
+    return (
+      <div className="app-shell app-shell--drill">
+        <SystemPanel
+          health={health}
+          zones={zones}
+          quota={quota}
+          onOpenCloud={() => setView({ kind: "cloud", via: "system" })}
+          onOpenBridge={() => setView({ kind: "bridge", via: "system" })}
+          onOpenDisplay={() => setView({ kind: "display", via: "system" })}
+          onOpenProtocol={() => setView({ kind: "protocol", via: "system" })}
+          onBack={goDashboard}
+          onHome={goDashboard}
+        />
+      </div>
+    );
+  }
+
   if (view.kind === "cloud") {
     return (
       <div className="app-shell app-shell--drill">
@@ -379,9 +403,12 @@ export function App() {
             setQuotaLoading(false);
           }}
           onLinked={() => void load({ quiet: true })}
-          onBack={goDashboard}
+          onSynced={() => void load({ quiet: true })}
+          onBack={() => backFromSystemChild(view.via)}
           onHome={goDashboard}
-          onOpenProtocol={() => setView({ kind: "protocol" })}
+          onOpenProtocol={() =>
+            setView({ kind: "protocol", via: view.via ?? "dashboard" })
+          }
         />
       </div>
     );
@@ -393,9 +420,9 @@ export function App() {
         <BridgePanel
           health={health}
           zones={zones}
-          onBack={goDashboard}
+          onBack={() => backFromSystemChild(view.via)}
           onHome={goDashboard}
-          onOpenCloud={() => setView({ kind: "cloud" })}
+          onOpenCloud={() => setView({ kind: "cloud", via: view.via ?? "dashboard" })}
         />
       </div>
     );
@@ -424,7 +451,7 @@ export function App() {
         <DisplayPanel
           showHumidity={showHumidity}
           onShowHumidityChange={setShowHumidity}
-          onBack={goDashboard}
+          onBack={() => backFromSystemChild(view.via)}
           onHome={goDashboard}
         />
       </div>
@@ -435,29 +462,34 @@ export function App() {
     return (
       <div className="app-shell app-shell--drill">
         <ProtocolPanel
-          onBack={goDashboard}
+          onBack={() => backFromSystemChild(view.via)}
           onHome={goDashboard}
-          onOpenCloud={() => setView({ kind: "cloud" })}
+          onOpenCloud={() =>
+            setView({ kind: "cloud", via: view.via ?? "dashboard" })
+          }
         />
       </div>
     );
   }
 
   const bootLoading = !offline && !health && !zones;
+  const showWarmupPromo =
+    !offline && !bootLoading && calendarMeta.ruleCount === 0;
 
   return (
     <div className="app-shell app-shell--dashboard">
-      <button
-        type="button"
-        className="promo-banner"
-        onClick={() => setView({ kind: "calendar-rules" })}
-      >
-        <span className="promo-banner__badge" aria-hidden="true">
-          <WarmupIcon />
-        </span>
-        <span>Lass uns dein Zuhause vorwärmen</span>
-        <span aria-hidden="true">→</span>
-      </button>
+      {/* Silent auto-sync — no hero chrome; UI lives under System › Cloud */}
+      {!offline ? (
+        <HomeCloudSync
+          variant="silent"
+          onSynced={() => void load({ quiet: true })}
+          onQuotaChange={(q) => {
+            setQuota(q);
+            setQuotaUnavailable(null);
+            setQuotaLoading(false);
+          }}
+        />
+      ) : null}
 
       <header className="home-header">
         <p className="home-header__brand">Heizplan</p>
@@ -471,7 +503,7 @@ export function App() {
         lastUpdated={lastUpdated}
         refreshing={refreshing}
         onRefresh={() => void load()}
-        onOpenDetail={() => setView({ kind: "bridge" })}
+        onOpenDetail={() => setView({ kind: "bridge", via: "dashboard" })}
       />
 
       {offline ? (
@@ -492,28 +524,6 @@ export function App() {
 
       {bootLoading ? <DashboardSkeleton /> : null}
 
-      {!offline && !bootLoading && health && !health.bridge.paired ? (
-        <div className="callout" role="status">
-          <strong>Bridge noch nicht verbunden.</strong>
-          {fixtureMode
-            ? " Testdaten aktiv — du kannst die Oberfläche schon ansehen."
-            : " Unter System → Bridge verbindest du die Heizung."}
-        </div>
-      ) : null}
-
-      {!offline &&
-      !bootLoading &&
-      health?.bridge.paired &&
-      zones?.naming &&
-      zones.naming.source !== "cloud" &&
-      zones.naming.source !== "map" ? (
-        <div className="callout callout--names" role="status">
-          <strong>Raumnamen von der Bridge</strong>
-          <span>Einmal Tado Cloud verknüpfen → vertraute Raumnamen.</span>
-          <CloudLinkPanel naming={zones.naming} onLinked={() => void load({ quiet: true })} />
-        </div>
-      ) : null}
-
       {!offline && !bootLoading ? (
         <AutomationHome
           presence={zones?.presence}
@@ -528,120 +538,76 @@ export function App() {
         />
       ) : null}
 
-      {!bootLoading ? (
-        <section className="dash-system" aria-label="System">
-          <p className="auto-home__label">System</p>
-          <div className="settings-group">
-            <button
-              type="button"
-              className="settings-row settings-row--button"
-              onClick={() => setView({ kind: "cloud" })}
-            >
-              <span
-                className="settings-row__circle settings-row__circle--icon"
-                style={{ background: "#3a3a3c" }}
-                aria-hidden="true"
-              >
-                <CloudIcon />
-              </span>
-              <span className="settings-row__label">
-                Cloud &amp; Kontingent
-                <small className="settings-row__sub">Namen, Tageslimit, Anfragen</small>
-              </span>
-              <span className="settings-row__meta">
-                {quota ? `${quota.remaining}` : "—"}
-              </span>
-              <ChevronIcon className="settings-row__chev" />
-            </button>
-            <button
-              type="button"
-              className="settings-row settings-row--button"
-              onClick={() => setView({ kind: "bridge" })}
-            >
-              <span
-                className="settings-row__circle settings-row__circle--icon"
-                style={{ background: "#2c2c2e" }}
-                aria-hidden="true"
-              >
-                <BridgeIcon />
-              </span>
-              <span className="settings-row__label">
-                Bridge
-                <small className="settings-row__sub">Verbindung zur Heizung</small>
-              </span>
-              <span className="settings-row__meta">
-                {health?.bridge.paired ? "OK" : "…"}
-              </span>
-              <ChevronIcon className="settings-row__chev" />
-            </button>
-            <button
-              type="button"
-              className="settings-row settings-row--button"
-              onClick={() => setView({ kind: "display" })}
-            >
-              <span
-                className="settings-row__circle settings-row__circle--icon"
-                style={{ background: "#2c2c2e" }}
-                aria-hidden="true"
-              >
-                <DisplayIcon />
-              </span>
-              <span className="settings-row__label">
-                Darstellung
-                <small className="settings-row__sub">Luftfeuchtigkeit anzeigen</small>
-              </span>
-              <ChevronIcon className="settings-row__chev" />
-            </button>
-            <button
-              type="button"
-              className="settings-row settings-row--button"
-              onClick={() => setView({ kind: "protocol" })}
-            >
-              <span
-                className="settings-row__circle settings-row__circle--icon"
-                style={{ background: "#3d3a66" }}
-                aria-hidden="true"
-              >
-                <ProtocolIcon />
-              </span>
-              <span className="settings-row__label">
-                Protokoll
-                <small className="settings-row__sub">Was Automationen gemacht haben</small>
-              </span>
-              <ChevronIcon className="settings-row__chev" />
-            </button>
-          </div>
-        </section>
+      {showWarmupPromo ? (
+        <button
+          type="button"
+          className="promo-banner promo-banner--after-auto"
+          onClick={() => setView({ kind: "calendar-rules" })}
+        >
+          <span className="promo-banner__badge" aria-hidden="true">
+            <WarmupIcon />
+          </span>
+          <span>Lass uns dein Zuhause vorwärmen</span>
+          <span aria-hidden="true">→</span>
+        </button>
       ) : null}
 
-      {!offline && !bootLoading ? (
-        <>
-          <CloudQuotaBadge
-            quota={quota}
-            loading={quotaLoading}
-            unavailableReason={quotaUnavailable}
-          />
+      {!offline && !bootLoading && health && !health.bridge.paired ? (
+        <div className="callout callout--compact" role="status">
+          <strong>Bridge noch nicht verbunden.</strong>
+          {fixtureMode
+            ? " Testdaten aktiv — du kannst die Oberfläche schon ansehen."
+            : " Unter System → Bridge verbindest du die Heizung."}
+        </div>
+      ) : null}
 
-          <HomeCloudSync
-            onSynced={() => void load({ quiet: true })}
-            onQuotaChange={(q) => {
-              setQuota(q);
-              setQuotaUnavailable(null);
-              setQuotaLoading(false);
-            }}
-          />
+      {!offline &&
+      !bootLoading &&
+      health?.bridge.paired &&
+      zones?.naming &&
+      zones.naming.source !== "cloud" &&
+      zones.naming.source !== "map" ? (
+        <div className="callout callout--names callout--compact" role="status">
+          <strong>Raumnamen von der Bridge</strong>
+          <span>Einmal Tado Cloud verknüpfen → vertraute Raumnamen.</span>
+          <CloudLinkPanel naming={zones.naming} onLinked={() => void load({ quiet: true })} />
+        </div>
+      ) : null}
 
-          <details className="home-rooms">
-            <summary className="home-rooms__summary">
-              Räume (optional · Steuerung in der Tado-App)
-            </summary>
-            <RoomGrid
-              zones={zones?.zones ?? []}
-              showHumidity={showHumidity}
-              onSelect={(zoneId) => setView({ kind: "room", zoneId })}
-            />
-          </details>
-        </>
+      {!bootLoading ? (
+        <section className="dash-more" aria-label="Mehr">
+          <button
+            type="button"
+            className="settings-row settings-row--button dash-more__system"
+            onClick={() => setView({ kind: "system" })}
+          >
+            <span
+              className="settings-row__circle settings-row__circle--icon"
+              style={{ background: "#2c2c2e" }}
+              aria-hidden="true"
+            >
+              <SlidersIcon />
+            </span>
+            <span className="settings-row__label">
+              System
+              <small className="settings-row__sub">Cloud, Bridge, Darstellung, Protokoll</small>
+            </span>
+            <ChevronIcon className="settings-row__chev" />
+          </button>
+
+          {!offline ? (
+            <details className="home-rooms">
+              <summary className="home-rooms__summary">
+                Räume (optional · Steuerung in der Tado-App)
+              </summary>
+              <RoomGrid
+                zones={zones?.zones ?? []}
+                showHumidity={showHumidity}
+                onSelect={(zoneId) => setView({ kind: "room", zoneId })}
+              />
+            </details>
+          ) : null}
+        </section>
       ) : null}
 
       <p className="footer-note">

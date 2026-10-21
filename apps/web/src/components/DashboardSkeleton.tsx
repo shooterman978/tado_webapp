@@ -6,7 +6,6 @@
 export function DashboardSkeleton() {
   return (
     <div className="dash-skeleton" aria-busy="true" aria-label="Lädt">
-      <div className="dash-skeleton__promo skel" />
       <div className="dash-skeleton__title skel" />
       <div className="dash-skeleton__chip skel" />
       <p className="auto-home__label">Automatisierung</p>
@@ -16,10 +15,7 @@ export function DashboardSkeleton() {
         <div className="skel skel--card" />
         <div className="skel skel--card" />
       </div>
-      <p className="auto-home__label" style={{ marginTop: "1rem" }}>
-        System
-      </p>
-      <div className="skel skel--group" aria-hidden="true" />
+      <div className="dash-skeleton__more skel" aria-hidden="true" />
     </div>
   );
 }

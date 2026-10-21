@@ -143,10 +143,6 @@ export function AutomationHome({
           </span>
         </button>
       </div>
-      <p className="auto-home__note">
-        Alltagstemperaturen stellst du in der Tado-App ein. Heizplan kümmert sich
-        um Termine, Fenster, Vorwärmen und Geofencing.
-      </p>
     </section>
   );
 }
