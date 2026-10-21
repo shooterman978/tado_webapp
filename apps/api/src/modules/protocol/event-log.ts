@@ -335,8 +335,8 @@ function cloudLogToProtocol(e: CloudQuotaLogEntry): ProtocolEvent {
     type: "quota.request",
     message:
       e.delta > 1
-        ? `Cloud-Request: ${label} (+${e.delta})`
-        : `Cloud-Request: ${label}`,
+        ? `Cloud-Anfrage: ${label} (+${e.delta})`
+        : `Cloud-Anfrage: ${label}`,
     actor: {
       kind: "cloud",
       label: (e.groupLabel?.trim() || "Cloud").slice(0, 80),

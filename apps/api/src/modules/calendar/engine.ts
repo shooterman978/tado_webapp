@@ -148,7 +148,7 @@ export async function reconcileOverrides(
       logProtocolEvent({
         category: "calendar",
         type: "calendar.override_clear",
-        message: `Termin-Override beendet${prev.ruleName ? `: ${prev.ruleName}` : ""}`,
+        message: `Termin beendet${prev.ruleName ? `: ${prev.ruleName}` : ""}`,
         roomId: prev.roomId,
         actor: {
           kind: "calendar",
@@ -207,7 +207,7 @@ export async function reconcileOverrides(
       logProtocolEvent({
         category: "calendar",
         type: "calendar.override_apply",
-        message: `Termin-Override aktiv: ${action.rule.name}`,
+        message: `Termin heizt mit: ${action.rule.name}`,
         roomId,
         actor: {
           kind: "calendar",

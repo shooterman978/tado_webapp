@@ -97,8 +97,8 @@ export function notePresenceMode(
     type: "presence.changed",
     message:
       mode === "home"
-        ? "Presence: Unterwegs → Zuhause"
-        : "Presence: Zuhause → Unterwegs",
+        ? "Unterwegs → Zuhause"
+        : "Zuhause → Unterwegs",
     actor: { kind: "presence", label: "Geofencing" },
     detail: { from, to: mode },
   });
@@ -171,8 +171,8 @@ export function noteCloudRequest(meta: {
     type: "quota.request",
     message:
       meta.delta > 1
-        ? `Cloud-Request: ${label} (+${meta.delta})`
-        : `Cloud-Request: ${label}`,
+        ? `Cloud-Anfrage: ${label} (+${meta.delta})`
+        : `Cloud-Anfrage: ${label}`,
     actor: {
       kind: "cloud",
       label: (meta.groupLabel?.trim() || "Cloud").slice(0, 80),
